@@ -374,8 +374,10 @@ function drawGate(
 
 /**
  * Draw a gate using the gate-arch.png asset with color tinting.
- * The asset has transparency (proper alpha channel).
- * We draw it, then tint using an offscreen canvas with source-atop compositing.
+ * The asset has a BLACK background (not transparent), so we use 'screen'
+ * blend mode to make black invisible and show the neon glow.
+ * Then we tint the result by overlaying color with 'multiply' on an
+ * offscreen canvas.
  */
 function drawAssetGate(
   ctx: CanvasRenderingContext2D,
@@ -393,7 +395,7 @@ function drawAssetGate(
   const drawX = x - drawW / 2;
   const drawY = y - drawH;
 
-  // Use offscreen canvas for color tinting
+  // Tint the gate on offscreen canvas: draw arch, then multiply with color
   const tW = Math.ceil(drawW * 2);
   const tH = Math.ceil(drawH * 2);
   const offCtx = getTintContext(tW, tH);
@@ -404,24 +406,28 @@ function drawAssetGate(
     // Draw the gate arch image
     offCtx.drawImage(archImg, 0, 0, tW, tH);
 
-    // Tint it with the gate's color using source-atop
-    offCtx.globalCompositeOperation = "source-atop";
+    // Color tint: use 'multiply' to shift the white/blue glow to the target color
+    offCtx.globalCompositeOperation = "multiply";
     offCtx.fillStyle = hex;
-    offCtx.globalAlpha = 0.6;
     offCtx.fillRect(0, 0, tW, tH);
-    offCtx.globalAlpha = 1;
     offCtx.globalCompositeOperation = "source-over";
 
-    // Draw the tinted gate onto the main canvas with neon glow
+    // Now draw the tinted result onto main canvas with 'screen' to remove black bg
+    const prevComposite = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = "screen";
+
+    // Neon glow shadow
     ctx.shadowColor = hex;
     ctx.shadowBlur = Math.min(35, gateWidth * 0.5);
     ctx.drawImage(tintCanvas!, drawX, drawY, drawW, drawH);
 
     // Second pass for stronger glow
-    ctx.globalAlpha = 0.3;
+    ctx.globalAlpha = 0.4;
     ctx.drawImage(tintCanvas!, drawX, drawY, drawW, drawH);
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
+
+    ctx.globalCompositeOperation = prevComposite;
   }
 
   // Color label badge
@@ -556,8 +562,8 @@ function drawCharacter(
 ) {
   const screen = projectToScreen({ x: laneX, y: 0, z: CHARACTER_Z }, w, h);
 
-  // Character size: prominent on screen (like Subway Surfers)
-  const baseSize = h * 0.055;
+  // Character size: large and prominent (like Subway Surfers ~20% of screen)
+  const baseSize = h * 0.09;
   const x = screen.x;
   const y = screen.y;
 

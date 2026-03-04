@@ -69,8 +69,15 @@ export function spawnGates(
     GATE_SPAWN_DISTANCE * (1 - (speed - 80) / 400)
   );
 
-  // Spawn gates ahead of camera
-  const spawnHorizon = cameraZ + 300;
+  // Spawn gates ahead of camera.
+  // Gates live in camera-relative Z space (high Z = far away, moves toward 0).
+  // When nextSpawnZ exceeds the visible range, reset it to keep spawning.
+  const spawnHorizon = 300;
+
+  // If we've already spawned past the horizon, reset to keep spawning continuously
+  if (nextSpawnZ > spawnHorizon) {
+    nextSpawnZ = 80 + Math.random() * 40;
+  }
 
   while (nextSpawnZ < spawnHorizon) {
     // Decide how many gates in this row (1 to maxGatesPerRow)

@@ -72,17 +72,26 @@ export function createInputHandler(
     }
   }
 
+  function onMouseClick(e: MouseEvent) {
+    // Only handle simple clicks (no drag), and avoid double-firing with touch
+    if (e.detail > 0) {
+      callbacks.onTap();
+    }
+  }
+
   return {
     attach(el: HTMLElement) {
       element = el;
       el.addEventListener("touchstart", onTouchStart, { passive: true });
       el.addEventListener("touchend", onTouchEnd, { passive: true });
+      el.addEventListener("click", onMouseClick);
       window.addEventListener("keydown", onKeyDown);
     },
     detach() {
       if (element) {
         element.removeEventListener("touchstart", onTouchStart);
         element.removeEventListener("touchend", onTouchEnd);
+        element.removeEventListener("click", onMouseClick);
       }
       window.removeEventListener("keydown", onKeyDown);
       element = null;
