@@ -310,6 +310,8 @@ export type GameCallbacks = {
   onTubeComplete?: (color: string) => void;
   onGateCollect?: (color: string) => void;
   onStateChange?: (state: RunnerGameState) => void;
+  /** Offscreen canvas from 3D character - updated externally each frame */
+  getChar3dCanvas?: () => HTMLCanvasElement | null;
 };
 
 export type GameController = {
@@ -404,6 +406,7 @@ export function createGameLoop(
       comboStreak: state.comboStreak,
       speedBoostTimer: state.speedBoostTimer,
       flashEffect: state.flashEffect,
+      char3dCanvas: callbacks.getChar3dCanvas?.() ?? null,
     };
 
     render(ctx, renderState);

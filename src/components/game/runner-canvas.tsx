@@ -5,6 +5,7 @@ import { createGameLoop, type GameController, type RunnerGameState } from "@/lib
 import { createInputHandler } from "@/lib/runner/input";
 import { loadGameAssets } from "@/lib/runner/assets";
 import { MAX_PIXEL_RATIO } from "@/lib/runner/constants";
+import { createCharacter3D, type Character3D } from "@/lib/runner/character-3d";
 
 type Props = {
   onStateChange: (state: RunnerGameState) => void;
@@ -24,6 +25,7 @@ export default function RunnerCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
+  const char3dRef = useRef<Character3D | null>(null);
 
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -51,20 +53,45 @@ export default function RunnerCanvas({
     let destroyed = false;
     let controller: GameController | null = null;
     let input: ReturnType<typeof createInputHandler> | null = null;
+    let lastCharUpdateTime = 0;
 
     async function init() {
-      // Load assets first
-      await loadGameAssets();
+      // Load 2D assets and 3D character in parallel
+      const [, char3d] = await Promise.all([
+        loadGameAssets(),
+        createCharacter3D().catch((err) => {
+          console.warn("3D character failed to load, using 2D fallback:", err);
+          return null;
+        }),
+      ]);
       if (destroyed) return;
+
+      if (char3d) {
+        char3dRef.current = char3d;
+      }
 
       setLoading(false);
       resizeCanvas();
+
+      // Update 3D character each frame via rAF (before game loop renders)
+      function updateChar3d(timestamp: number) {
+        if (destroyed) return;
+        const dt = Math.min((timestamp - lastCharUpdateTime) / 1000, 0.05);
+        lastCharUpdateTime = timestamp;
+        char3dRef.current?.update(dt);
+        requestAnimationFrame(updateChar3d);
+      }
+      if (char3dRef.current) {
+        lastCharUpdateTime = performance.now();
+        requestAnimationFrame(updateChar3d);
+      }
 
       controller = createGameLoop(canvas!, {
         onStateChange,
         onGameOver,
         onTubeComplete,
         onGateCollect,
+        getChar3dCanvas: () => char3dRef.current?.ready ? char3dRef.current.getCanvas() : null,
       });
 
       controllerRef.current = controller;
@@ -93,6 +120,8 @@ export default function RunnerCanvas({
       destroyed = true;
       controller?.destroy();
       input?.detach();
+      char3dRef.current?.dispose();
+      char3dRef.current = null;
       window.removeEventListener("resize", handleResize);
       controllerRef.current = null;
     };

@@ -36,6 +36,8 @@ export type RenderState = {
   comboStreak: number;
   speedBoostTimer: number;
   flashEffect: { color: string; alpha: number } | null;
+  /** Offscreen canvas from 3D character renderer (if available) */
+  char3dCanvas?: HTMLCanvasElement | null;
 };
 
 // ── Reusable offscreen canvas for gate tinting ────────────────────
@@ -842,7 +844,8 @@ function drawCharacter(
   h: number,
   animFrame: number,
   speedBoost: boolean,
-  assets: GameAssets | null
+  assets: GameAssets | null,
+  char3dCanvas?: HTMLCanvasElement | null
 ) {
   const screen = projectToScreen({ x: laneX, y: 0, z: CHARACTER_Z }, w, h);
 
@@ -851,9 +854,9 @@ function drawCharacter(
   const x = screen.x;
   const y = screen.y;
 
-  // Running bob animation
+  // Running bob animation (only for 2D fallback)
   const runPhase = animFrame * Math.PI * 0.5;
-  const bounce = Math.abs(Math.sin(runPhase)) * baseSize * 0.15;
+  const bounce = char3dCanvas ? 0 : Math.abs(Math.sin(runPhase)) * baseSize * 0.15;
 
   ctx.save();
 
@@ -874,13 +877,49 @@ function drawCharacter(
   ctx.fill();
   ctx.restore();
 
-  if (assets?.character) {
+  if (char3dCanvas) {
+    // Draw the 3D rendered character from offscreen Three.js canvas
+    draw3DCharacter(ctx, char3dCanvas, x, y, baseSize, speedBoost);
+  } else if (assets?.character) {
     drawAssetCharacter(ctx, assets.character, x, y, baseSize, bounce, speedBoost);
   } else {
     drawFallbackCharacter(ctx, x, y, baseSize, animFrame, speedBoost);
   }
 
   ctx.restore();
+}
+
+/**
+ * Draw the 3D character from an offscreen Three.js canvas.
+ */
+function draw3DCharacter(
+  ctx: CanvasRenderingContext2D,
+  char3dCanvas: HTMLCanvasElement,
+  x: number,
+  y: number,
+  baseSize: number,
+  speedBoost: boolean
+) {
+  const charH = baseSize * 3.5;
+  const charW = charH; // 3D canvas is square
+  const drawX = x - charW / 2;
+  const drawY = y - charH;
+
+  // Speed boost aura
+  if (speedBoost) {
+    ctx.save();
+    ctx.shadowColor = "#FFD700";
+    ctx.shadowBlur = 35;
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.ellipse(x, y - charH * 0.4, charW * 0.7, charH * 0.55, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 215, 0, 0.08)";
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Draw the 3D character (transparent background from WebGL)
+  ctx.drawImage(char3dCanvas, drawX, drawY, charW, charH);
 }
 
 /**
@@ -1112,7 +1151,8 @@ export function render(
     h,
     state.animFrame,
     state.speedBoostTimer > 0,
-    assets
+    assets,
+    state.char3dCanvas
   );
 
   // Particles
