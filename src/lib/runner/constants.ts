@@ -12,18 +12,18 @@ export const VIEW_DISTANCE = 280;
 export const ROAD_WIDTH = 6.0; // World units total road width
 
 // Speed settings
-export const INITIAL_SPEED = 80;
-export const MAX_SPEED = 280;
-export const SPEED_INCREMENT = 0.8; // Per second acceleration
-export const SPEED_BOOST_AMOUNT = 60;
+export const INITIAL_SPEED = 50; // Slower start for playability
+export const MAX_SPEED = 200;
+export const SPEED_INCREMENT = 0.4; // Gentler acceleration
+export const SPEED_BOOST_AMOUNT = 40;
 export const SPEED_BOOST_DURATION = 1.5; // seconds
 
 // Lane switching
 export const LANE_SWITCH_DURATION = 0.15; // seconds to switch lanes
 
 // Entity spawning
-export const GATE_SPAWN_DISTANCE = 60; // World units between gate rows
-export const MIN_GATE_SPAWN_DISTANCE = 30; // Minimum at max speed
+export const GATE_SPAWN_DISTANCE = 80; // World units between gate rows (more spacing)
+export const MIN_GATE_SPAWN_DISTANCE = 45; // Minimum at max speed
 export const GATES_PER_ROW_MIN = 1;
 export const GATES_PER_ROW_MAX = 2; // Starts at 2, increases to 3
 

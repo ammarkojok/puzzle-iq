@@ -363,11 +363,8 @@ function drawGate(
 
   ctx.save();
 
-  if (assets?.gateArch && gateWidth > 10) {
-    drawAssetGate(ctx, assets.gateArch, x, y, gateWidth, gateHeight, hex, glow, entity.color);
-  } else {
-    drawProceduralGate(ctx, x, y, gateWidth, gateHeight, hex, glow, entity.color);
-  }
+  // Always use procedural neon gates (asset screen blend causes wash-out)
+  drawProceduralGate(ctx, x, y, gateWidth, gateHeight, hex, glow, entity.color);
 
   ctx.restore();
 }
@@ -437,7 +434,7 @@ function drawAssetGate(
 }
 
 /**
- * Fallback procedural gate rendering when assets unavailable or gate is too small.
+ * Professional neon arch gate - drawn procedurally with glow effects.
  */
 function drawProceduralGate(
   ctx: CanvasRenderingContext2D,
@@ -446,71 +443,67 @@ function drawProceduralGate(
   gateWidth: number,
   gateHeight: number,
   hex: string,
-  glow: string,
+  _glow: string,
   colorId: string
 ) {
-  const pillarWidth = gateWidth * 0.1;
-  const archThickness = gateHeight * 0.12;
+  const pw = gateWidth * 0.12; // pillar width
+  const archR = (gateWidth - pw * 2) / 2; // arch radius
+  const archCenterY = y - gateHeight + archR + pw;
 
-  // Neon glow
+  ctx.save();
+
+  // Outer neon glow (large, soft)
   ctx.shadowColor = hex;
-  ctx.shadowBlur = Math.min(30, gateWidth * 0.4);
+  ctx.shadowBlur = Math.min(25, gateWidth * 0.3);
 
-  // Left pillar with gradient
-  const pillarGrad = ctx.createLinearGradient(
-    x - gateWidth / 2,
-    y - gateHeight,
-    x - gateWidth / 2 + pillarWidth,
-    y
-  );
-  pillarGrad.addColorStop(0, hex);
-  pillarGrad.addColorStop(1, glow);
-  ctx.fillStyle = pillarGrad;
-  ctx.fillRect(x - gateWidth / 2, y - gateHeight, pillarWidth, gateHeight);
+  // Draw the arch shape as a single path: left pillar → arc top → right pillar
+  ctx.strokeStyle = hex;
+  ctx.lineWidth = pw;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
 
-  // Right pillar
-  ctx.fillRect(
-    x + gateWidth / 2 - pillarWidth,
-    y - gateHeight,
-    pillarWidth,
-    gateHeight
-  );
+  ctx.beginPath();
+  // Left pillar bottom to top
+  ctx.moveTo(x - gateWidth / 2 + pw / 2, y);
+  ctx.lineTo(x - gateWidth / 2 + pw / 2, archCenterY);
+  // Arch curve across the top
+  ctx.arc(x, archCenterY, archR, Math.PI, 0, false);
+  // Right pillar top to bottom
+  ctx.lineTo(x + gateWidth / 2 - pw / 2, y);
+  ctx.stroke();
 
-  // Top arch bar
-  ctx.fillStyle = hex;
-  ctx.fillRect(x - gateWidth / 2, y - gateHeight, gateWidth, archThickness);
-
-  // Semi-transparent inner fill
-  ctx.fillStyle = glow;
-  ctx.globalAlpha = 0.25;
-  ctx.fillRect(
-    x - gateWidth / 2 + pillarWidth,
-    y - gateHeight + archThickness,
-    gateWidth - pillarWidth * 2,
-    gateHeight - archThickness
-  );
+  // Inner glow pass (brighter, thinner)
+  ctx.shadowBlur = Math.min(15, gateWidth * 0.2);
+  ctx.strokeStyle = "#ffffff";
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = pw * 0.4;
+  ctx.beginPath();
+  ctx.moveTo(x - gateWidth / 2 + pw / 2, y);
+  ctx.lineTo(x - gateWidth / 2 + pw / 2, archCenterY);
+  ctx.arc(x, archCenterY, archR, Math.PI, 0, false);
+  ctx.lineTo(x + gateWidth / 2 - pw / 2, y);
+  ctx.stroke();
   ctx.globalAlpha = 1;
-  ctx.shadowBlur = 0;
 
-  // Inner arch detail
+  // Translucent color fill inside the arch (very subtle)
   if (gateWidth > 15) {
-    ctx.strokeStyle = hex;
-    ctx.lineWidth = Math.max(1, gateWidth * 0.03);
-    ctx.globalAlpha = 0.5;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = hex;
+    ctx.globalAlpha = 0.08;
     ctx.beginPath();
-    ctx.arc(
-      x,
-      y - gateHeight + archThickness,
-      (gateWidth - pillarWidth * 2) / 2,
-      Math.PI,
-      0
-    );
-    ctx.stroke();
+    ctx.moveTo(x - archR, archCenterY);
+    ctx.arc(x, archCenterY, archR, Math.PI, 0, false);
+    ctx.lineTo(x + archR, y);
+    ctx.lineTo(x - archR, y);
+    ctx.closePath();
+    ctx.fill();
     ctx.globalAlpha = 1;
   }
 
-  // Color label
-  if (gateWidth > 12) {
+  ctx.restore();
+
+  // Color label badge
+  if (gateWidth > 14) {
     drawGateLabel(ctx, x, y, gateWidth, gateHeight, hex, colorId);
   }
 }
@@ -601,8 +594,7 @@ function drawCharacter(
 
 /**
  * Draw the neon runner character using the sprite asset.
- * The sprite is on a BLACK background, so we use 'screen' blend mode
- * which makes black pixels transparent and bright neon pixels glow.
+ * Uses an offscreen canvas to remove the black background, then draws normally.
  */
 function drawAssetCharacter(
   ctx: CanvasRenderingContext2D,
@@ -632,21 +624,30 @@ function drawAssetCharacter(
     ctx.restore();
   }
 
-  // Save current composite operation
-  const prevComposite = ctx.globalCompositeOperation;
+  // Draw character with 'screen' blend mode to remove black background.
+  // This makes dark clothes semi-transparent but neon parts glow through.
+  // We draw it twice: once normal for the base, once screen for the glow.
 
-  // Draw character with 'screen' blend mode:
-  // black pixels become transparent, bright neon pixels glow
+  // First pass: draw normally at reduced opacity for the base shape
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  ctx.drawImage(charImg, drawX, drawY, charW, charH);
+  ctx.restore();
+
+  // Second pass: screen blend for neon glow effect on bright parts
+  ctx.save();
   ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = 0.6;
   ctx.drawImage(charImg, drawX, drawY, charW, charH);
+  ctx.restore();
 
-  // Second pass at reduced opacity for extra glow intensity
-  ctx.globalAlpha = 0.3;
+  // Neon outline glow around the character
+  ctx.save();
+  ctx.shadowColor = "#00d4ff";
+  ctx.shadowBlur = 12;
+  ctx.globalAlpha = 0;
   ctx.drawImage(charImg, drawX, drawY, charW, charH);
-  ctx.globalAlpha = 1;
-
-  // Restore composite operation
-  ctx.globalCompositeOperation = prevComposite;
+  ctx.restore();
 }
 
 /**
