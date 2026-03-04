@@ -18,7 +18,7 @@ export type Character3D = {
   ready: boolean;
 };
 
-const RENDER_SIZE = 256; // Offscreen canvas resolution
+const RENDER_SIZE = 384; // Offscreen canvas resolution
 
 export async function createCharacter3D(): Promise<Character3D> {
   // ── Setup offscreen renderer ───────────────────────────────

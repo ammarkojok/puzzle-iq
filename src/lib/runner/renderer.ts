@@ -132,7 +132,7 @@ function drawSky(
     const imgH = assets.cityLayer.height;
     const drawH = horizon * 0.55;
     const drawW = drawH * (imgW / imgH);
-    const scrollX = -(distance * 0.04) % drawW;
+    const scrollX = -(distance * 0.12) % drawW;
     const yPos = horizon - drawH;
 
     // Distant city layer -- faded and atmospheric
@@ -181,24 +181,25 @@ function drawRoad(
   ctx.fillStyle = fogGrad;
   ctx.fillRect(0, horizon, w, 80);
 
-  // Ground texture: scrolling dots for sense of speed
-  const dotSpacing = 30;
-  const dotScrollY = (distance * 0.7) % dotSpacing;
-  for (let gy = horizon + 8; gy < h; gy += dotSpacing) {
-    const t = (gy - horizon) / (h - horizon);
-    const dotAlpha = t * 0.07;
-    const scrolledY = gy + dotScrollY;
-    if (scrolledY > h) continue;
-    for (let gx = 0; gx < w; gx += dotSpacing * 1.4) {
-      // Skip dots under the road surface
-      const roadAtY =
-        roadHalf *
-        (VIEW_DISTANCE / Math.max(0.5, (scrolledY - horizon) / CAMERA_HEIGHT));
-      if (Math.abs(gx - w / 2) < roadAtY) continue;
-      ctx.fillStyle = `rgba(80, 50, 150, ${dotAlpha})`;
-      ctx.fillRect(gx, scrolledY, 1.5, 1.5);
-    }
+  // Scrolling ground grid for speed visualization
+  const gridSpacingWorld = 12;
+  const gridCount = 20;
+  ctx.save();
+  for (let gi = 0; gi < gridCount; gi++) {
+    const zWorld = ((gi * gridSpacingWorld) - (distance % gridSpacingWorld)) + 2;
+    if (zWorld < 2) continue;
+    const gScale = VIEW_DISTANCE / zWorld;
+    const yPos = horizon + CAMERA_HEIGHT * gScale;
+    if (yPos > h || yPos < horizon) continue;
+    const gDistFade = Math.min(1, 2.0 / (gi * 0.3 + 1));
+    ctx.strokeStyle = `rgba(60, 30, 120, ${gDistFade * 0.12})`;
+    ctx.lineWidth = Math.max(0.3, gScale * 0.003);
+    const roadEdgeL = w / 2 - roadHalf * gScale;
+    const roadEdgeR = w / 2 + roadHalf * gScale;
+    ctx.beginPath(); ctx.moveTo(0, yPos); ctx.lineTo(roadEdgeL - 5, yPos); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(roadEdgeR + 5, yPos); ctx.lineTo(w, yPos); ctx.stroke();
   }
+  ctx.restore();
 
   // Draw road segments from far to near
   for (let i = ROAD_SEGMENT_COUNT; i > 0; i--) {
@@ -242,7 +243,7 @@ function drawRoad(
     // Left edge: cyan neon line
     ctx.save();
     ctx.shadowColor = "#00e5ff";
-    ctx.shadowBlur = Math.min(12, edgeWidth * 6);
+    ctx.shadowBlur = Math.min(12, edgeWidth * 6) * (0.8 + 0.2 * Math.sin(distance * 0.05 + i * 0.3));
     ctx.strokeStyle = `rgba(0, 229, 255, ${edgeAlpha * 0.6})`;
     ctx.lineWidth = edgeWidth;
     ctx.beginPath();
@@ -254,7 +255,7 @@ function drawRoad(
     // Right edge: magenta/purple neon line
     ctx.save();
     ctx.shadowColor = "#d050ff";
-    ctx.shadowBlur = Math.min(12, edgeWidth * 6);
+    ctx.shadowBlur = Math.min(12, edgeWidth * 6) * (0.8 + 0.2 * Math.sin(distance * 0.05 + i * 0.3 + 1.5));
     ctx.strokeStyle = `rgba(208, 80, 255, ${edgeAlpha * 0.6})`;
     ctx.lineWidth = edgeWidth;
     ctx.beginPath();
@@ -309,6 +310,31 @@ function drawRoad(
       ctx.stroke();
       ctx.restore();
     }
+  }
+
+  // Speed chevrons on road
+  if (speed > 40) {
+    const chevronSpacing = 20;
+    const chevronScroll = distance % chevronSpacing;
+    const chevronAlpha = Math.min(0.15, (speed - 40) / 600);
+    ctx.save();
+    ctx.strokeStyle = `rgba(100, 60, 200, ${chevronAlpha})`;
+    ctx.lineWidth = 1;
+    for (let ci = 0; ci < 8; ci++) {
+      const cz = (ci * chevronSpacing) - chevronScroll + 5;
+      if (cz < 3 || cz > 150) continue;
+      const cScale = VIEW_DISTANCE / cz;
+      const cyPos = horizon + CAMERA_HEIGHT * cScale;
+      if (cyPos > h || cyPos < horizon) continue;
+      const chevW = 0.8 * cScale;
+      const chevH = 0.4 * cScale;
+      ctx.beginPath();
+      ctx.moveTo(w / 2 - chevW, cyPos);
+      ctx.lineTo(w / 2, cyPos - chevH);
+      ctx.lineTo(w / 2 + chevW, cyPos);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // Bottom-of-screen neon ground glow
@@ -376,10 +402,9 @@ function drawSideBuildings(
   const roadHalf = ROAD_WIDTH / 2;
 
   // Building placement parameters
-  const BUILDING_COUNT = 10; // buildings per side
-  const BUILDING_SPACING = 16; // world-unit spacing along Z axis
+  const BUILDING_COUNT = 16; // buildings per side
+  const BUILDING_SPACING = 18; // world-unit spacing along Z axis
   const BUILDING_GAP = 0.6; // gap between road edge and building inner edge (world units)
-  const BUILDING_DEPTH = 3.5; // visual width of building in world units
 
   // Scroll offset: buildings repeat every (BUILDING_COUNT * BUILDING_SPACING)
   const totalCycleLength = BUILDING_COUNT * BUILDING_SPACING;
@@ -416,6 +441,10 @@ function drawSideBuildings(
     // Seed for this specific building slot -- stable within a cycle
     const slotSeed = i * 31 + cycleIndex * 997;
 
+    // Building width variation per slot
+    const widthRand = seededRandom(slotSeed + 7);
+    const buildingDepth = 3.0 + widthRand * 2.0; // 3.0..5.0 world units
+
     // Building height varies per slot (tall city feel)
     const heightRand = seededRandom(slotSeed + 1);
     const buildingWorldHeight = 6 + heightRand * 10; // 6..16 world units tall
@@ -442,8 +471,8 @@ function drawSideBuildings(
       const farInnerX = w / 2 + side * (roadHalf + BUILDING_GAP) * farScale;
 
       // Outer edge of building
-      const nearOuterX = w / 2 + side * (roadHalf + BUILDING_GAP + BUILDING_DEPTH) * nearScale;
-      const farOuterX = w / 2 + side * (roadHalf + BUILDING_GAP + BUILDING_DEPTH) * farScale;
+      const nearOuterX = w / 2 + side * (roadHalf + BUILDING_GAP + buildingDepth) * nearScale;
+      const farOuterX = w / 2 + side * (roadHalf + BUILDING_GAP + buildingDepth) * farScale;
 
       // Building body: dark trapezoid
       const bodyColorSeed = seededRandom(sideSeed + 2);
@@ -571,14 +600,16 @@ function drawSideBuildings(
         const billColorSeed = seededRandom(sideSeed + 900);
         let billColor: string;
         let billShadow: string;
+        // Neon sign breathing pulse
+        const neonPulse = 0.7 + 0.3 * Math.sin(distance * 0.03 + i * 1.7);
         if (billColorSeed < 0.33) {
-          billColor = `rgba(255, 60, 120, ${distFade * 0.7})`;
+          billColor = `rgba(255, 60, 120, ${distFade * 0.7 * neonPulse})`;
           billShadow = "#ff3c78";
         } else if (billColorSeed < 0.66) {
-          billColor = `rgba(0, 255, 180, ${distFade * 0.6})`;
+          billColor = `rgba(0, 255, 180, ${distFade * 0.6 * neonPulse})`;
           billShadow = "#00ffb4";
         } else {
-          billColor = `rgba(255, 200, 0, ${distFade * 0.65})`;
+          billColor = `rgba(255, 200, 0, ${distFade * 0.65 * neonPulse})`;
           billShadow = "#ffc800";
         }
 
@@ -628,6 +659,64 @@ function drawSideBuildings(
 
   ctx.globalAlpha = 1;
   ctx.restore();
+}
+
+// ── Light Posts ───────────────────────────────────────────────────
+
+function drawLightPosts(ctx: CanvasRenderingContext2D, w: number, h: number, distance: number) {
+  const horizon = h * HORIZON_RATIO;
+  const roadHalf = ROAD_WIDTH / 2;
+  const POST_SPACING = 24;
+  const POST_GAP = 0.3;
+  const POST_HEIGHT = 4.0;
+  const scrollOffset = distance % POST_SPACING;
+
+  for (let i = 8; i >= 0; i--) {
+    const z = (i + 1) * POST_SPACING - scrollOffset;
+    if (z < 3 || z > 200) continue;
+
+    const scale = VIEW_DISTANCE / z;
+    const yBase = horizon + CAMERA_HEIGHT * scale;
+    const yTop = yBase - POST_HEIGHT * scale;
+    if (yBase > h + 10 || yTop < horizon) continue;
+
+    const distFade = Math.min(1, 2.5 / (i * 0.3 + 1));
+    const postWidth = Math.max(0.5, scale * 0.04);
+
+    for (const side of [-1, 1]) {
+      const xPos = w / 2 + side * (roadHalf + POST_GAP) * scale;
+      const isLeft = side === -1;
+      const color = isLeft ? "#00e5ff" : "#d050ff";
+
+      ctx.save();
+      // Post pole
+      ctx.strokeStyle = `rgba(60, 40, 100, ${distFade * 0.6})`;
+      ctx.lineWidth = postWidth;
+      ctx.beginPath();
+      ctx.moveTo(xPos, yBase);
+      ctx.lineTo(xPos, yTop);
+      ctx.stroke();
+
+      // Neon light at top
+      const lightSize = Math.max(1.5, scale * 0.15);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = Math.min(12, lightSize * 4);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = distFade * 0.8;
+      ctx.beginPath();
+      ctx.arc(xPos, yTop, lightSize, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ground light pool
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = distFade * 0.06;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.ellipse(xPos, yBase + 2, lightSize * 3, lightSize * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
 }
 
 // ── Entities (Gates) ──────────────────────────────────────────────
@@ -844,6 +933,7 @@ function drawCharacter(
   h: number,
   animFrame: number,
   speedBoost: boolean,
+  speed: number,
   assets: GameAssets | null,
   char3dCanvas?: HTMLCanvasElement | null
 ) {
@@ -860,20 +950,25 @@ function drawCharacter(
 
   ctx.save();
 
-  // Ground shadow beneath the character
-  ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+  // Ground shadow beneath the character (scales with speed)
+  const shadowScale = 1.0 + Math.min(0.5, speed / 300);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
   ctx.beginPath();
-  ctx.ellipse(x, y + 3, baseSize * 1.0, baseSize * 0.12, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y + 3, baseSize * shadowScale, baseSize * 0.15, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Neon ground reflection
-  const reflectColor = speedBoost ? "#FFD700" : "#00d4ff";
+  // Dual-color neon reflection matching road edges
   ctx.save();
-  ctx.shadowColor = reflectColor;
-  ctx.shadowBlur = 20;
-  ctx.fillStyle = `rgba(0, 0, 0, 0)`;
+  ctx.shadowColor = "#00e5ff";
+  ctx.shadowBlur = 25;
+  ctx.fillStyle = "rgba(0, 229, 255, 0.03)";
   ctx.beginPath();
-  ctx.ellipse(x, y + 2, baseSize * 0.7, baseSize * 0.08, 0, 0, Math.PI * 2);
+  ctx.ellipse(x - baseSize * 0.3, y + 2, baseSize * 0.6, baseSize * 0.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowColor = "#d050ff";
+  ctx.fillStyle = "rgba(208, 80, 255, 0.03)";
+  ctx.beginPath();
+  ctx.ellipse(x + baseSize * 0.3, y + 2, baseSize * 0.6, baseSize * 0.1, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
@@ -916,6 +1011,17 @@ function draw3DCharacter(
     ctx.fillStyle = "rgba(255, 215, 0, 0.08)";
     ctx.fill();
     ctx.restore();
+  }
+
+  // Dust trail behind character
+  for (let d = 1; d <= 3; d++) {
+    const trailAlpha = 0.04 / d;
+    const trailY = y + 2 + d * 2;
+    const trailSize = baseSize * (0.3 + d * 0.1);
+    ctx.fillStyle = `rgba(100, 70, 180, ${trailAlpha})`;
+    ctx.beginPath();
+    ctx.ellipse(x, trailY, trailSize, trailSize * 0.15, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   // Draw the 3D character (transparent background from WebGL)
@@ -1069,9 +1175,9 @@ function drawSpeedLines(
   speed: number,
   distance: number
 ) {
-  if (speed < 100) return;
+  if (speed < 60) return;
 
-  const intensity = Math.min(1, (speed - 100) / 150);
+  const intensity = Math.min(1, (speed - 60) / 200);
   const lineCount = Math.floor(intensity * 14);
   const horizon = h * HORIZON_RATIO;
 
@@ -1130,6 +1236,9 @@ export function render(
   // Side buildings: city corridor effect on both sides of the road
   drawSideBuildings(ctx, w, h, state.distance);
 
+  // Light posts along road edges
+  drawLightPosts(ctx, w, h, state.distance);
+
   // Speed lines (light trails at high speed)
   drawSpeedLines(ctx, w, h, state.speed, state.distance);
 
@@ -1151,6 +1260,7 @@ export function render(
     h,
     state.animFrame,
     state.speedBoostTimer > 0,
+    state.speed,
     assets,
     state.char3dCanvas
   );
@@ -1161,6 +1271,16 @@ export function render(
   // Flash effect
   if (state.flashEffect && state.flashEffect.alpha > 0) {
     drawFlashEffect(ctx, w, h, state.flashEffect);
+  }
+
+  // Speed vignette
+  if (state.speed > 80) {
+    const vigIntensity = Math.min(0.3, (state.speed - 80) / 400);
+    const vig = ctx.createRadialGradient(w / 2, h / 2, w * 0.3, w / 2, h / 2, w * 0.75);
+    vig.addColorStop(0, "rgba(0, 0, 0, 0)");
+    vig.addColorStop(1, `rgba(0, 0, 0, ${vigIntensity})`);
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, w, h);
   }
 
   // Ready screen overlay

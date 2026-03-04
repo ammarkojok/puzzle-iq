@@ -66,7 +66,7 @@ export function spawnGates(
   // Spawn distance decreases with speed (more frequent at higher speed)
   const spawnDist = Math.max(
     MIN_GATE_SPAWN_DISTANCE,
-    GATE_SPAWN_DISTANCE * (1 - (speed - 80) / 400)
+    GATE_SPAWN_DISTANCE * (1 - (speed - 60) / 600)
   );
 
   // Spawn gates ahead of camera.
@@ -74,12 +74,17 @@ export function spawnGates(
   // When nextSpawnZ exceeds the visible range, reset it to keep spawning.
   const spawnHorizon = 300;
 
-  // If we've already spawned past the horizon, reset to keep spawning continuously
+  // If we've already spawned past the horizon, reset to the next spawn distance
+  // (NOT a random close value, which would cause 3-4 rows to burst in one frame)
   if (nextSpawnZ > spawnHorizon) {
-    nextSpawnZ = 80 + Math.random() * 40;
+    nextSpawnZ = spawnDist;
   }
 
-  while (nextSpawnZ < spawnHorizon) {
+  // Cap rows spawned per frame to prevent burst spawning
+  const MAX_ROWS_PER_FRAME = 2;
+  let rowsSpawned = 0;
+
+  while (nextSpawnZ < spawnHorizon && rowsSpawned < MAX_ROWS_PER_FRAME) {
     // Decide how many gates in this row (1 to maxGatesPerRow)
     const gateCount =
       1 + Math.floor(Math.random() * stage.maxGatesPerRow);
@@ -106,6 +111,7 @@ export function spawnGates(
     }
 
     nextSpawnZ += spawnDist;
+    rowsSpawned++;
   }
 
   return {
