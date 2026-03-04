@@ -22,8 +22,8 @@ export const SPEED_BOOST_DURATION = 1.5; // seconds
 export const LANE_SWITCH_DURATION = 0.15; // seconds to switch lanes
 
 // Entity spawning
-export const GATE_SPAWN_DISTANCE = 80; // World units between gate rows (more spacing)
-export const MIN_GATE_SPAWN_DISTANCE = 45; // Minimum at max speed
+export const GATE_SPAWN_DISTANCE = 120; // World units between gate rows (spacious at start)
+export const MIN_GATE_SPAWN_DISTANCE = 55; // Minimum at max speed
 export const GATES_PER_ROW_MIN = 1;
 export const GATES_PER_ROW_MAX = 2; // Starts at 2, increases to 3
 
@@ -33,9 +33,10 @@ export const TUBE_CAPACITY = 4;
 
 // Difficulty milestones (distance thresholds)
 export const DIFFICULTY_STAGES = [
-  { distance: 0, colors: 4, maxGatesPerRow: 2, speedMultiplier: 1.0 },
-  { distance: 500, colors: 5, maxGatesPerRow: 2, speedMultiplier: 1.15 },
-  { distance: 1500, colors: 6, maxGatesPerRow: 3, speedMultiplier: 1.3 },
+  { distance: 0, colors: 4, maxGatesPerRow: 1, speedMultiplier: 1.0 },
+  { distance: 300, colors: 4, maxGatesPerRow: 2, speedMultiplier: 1.05 },
+  { distance: 800, colors: 5, maxGatesPerRow: 2, speedMultiplier: 1.15 },
+  { distance: 1500, colors: 6, maxGatesPerRow: 2, speedMultiplier: 1.3 },
   { distance: 3000, colors: 7, maxGatesPerRow: 3, speedMultiplier: 1.5 },
   { distance: 5000, colors: 8, maxGatesPerRow: 3, speedMultiplier: 1.7 },
 ];
