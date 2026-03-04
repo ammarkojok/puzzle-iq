@@ -167,15 +167,66 @@ function drawRoad(
   const horizon = h * HORIZON_RATIO;
   const roadHalf = ROAD_WIDTH / 2;
 
-  // Ground plane: very dark with slight purple tint
-  const groundGrad = ctx.createLinearGradient(0, horizon, 0, h);
-  groundGrad.addColorStop(0, "#0c0520");
-  groundGrad.addColorStop(0.5, "#08031a");
-  groundGrad.addColorStop(1, "#050210");
-  ctx.fillStyle = groundGrad;
-  ctx.fillRect(0, horizon, w, h - horizon);
+  // ── Single continuous road surface (horizon → bottom) ──────────
+  // Far edge at max Z, near edge extends past screen bottom
+  const zFar = ROAD_SEGMENT_COUNT * 4;
+  const zNear = 1.5; // Low Z so road fills to screen bottom
+  const farScale = VIEW_DISTANCE / zFar;
+  const nearScale = VIEW_DISTANCE / zNear;
+  const farY = horizon + CAMERA_HEIGHT * farScale;
+  const nearY = Math.min(h + 50, horizon + CAMERA_HEIGHT * nearScale); // clamp
+  const farLeftX = w / 2 - roadHalf * farScale;
+  const farRightX = w / 2 + roadHalf * farScale;
+  const nearLeftX = w / 2 - roadHalf * nearScale;
+  const nearRightX = w / 2 + roadHalf * nearScale;
 
-  // Ground fog near the horizon: atmospheric haze
+  // Dark road base fill — one continuous surface
+  ctx.fillStyle = "#0a0618";
+  ctx.beginPath();
+  ctx.moveTo(farLeftX, farY);
+  ctx.lineTo(farRightX, farY);
+  ctx.lineTo(nearRightX, nearY);
+  ctx.lineTo(nearLeftX, nearY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Road texture overlay (single draw, clipped to road shape)
+  if (assets?.roadTexture) {
+    const texImg = assets.roadTexture;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(farLeftX, farY);
+    ctx.lineTo(farRightX, farY);
+    ctx.lineTo(nearRightX, nearY);
+    ctx.lineTo(nearLeftX, nearY);
+    ctx.closePath();
+    ctx.clip();
+
+    // Draw texture tiles at multiple Z-depths for perspective feel
+    ctx.globalAlpha = 0.4;
+    const texAspect = texImg.height / texImg.width;
+    for (let ti = 0; ti < 12; ti++) {
+      const tZFar = 4 + ti * 16;
+      const tZNear = Math.max(1.5, tZFar - 16);
+      const tFarScale = VIEW_DISTANCE / tZFar;
+      const tNearScale = VIEW_DISTANCE / tZNear;
+      const tFarY = horizon + CAMERA_HEIGHT * tFarScale;
+      const tNearY = Math.min(h + 50, horizon + CAMERA_HEIGHT * tNearScale);
+      if (tFarY > h + 10 || tNearY < horizon) continue;
+      const tNearLeftX = w / 2 - roadHalf * tNearScale;
+      const tRoadW = (w / 2 + roadHalf * tNearScale) - tNearLeftX;
+      const tTexH = tRoadW * texAspect;
+      // Scroll texture with distance
+      const scrollOffset = (distance * 6) % tTexH;
+      for (let ty = tFarY - scrollOffset - tTexH; ty < tNearY; ty += tTexH) {
+        ctx.drawImage(texImg, tNearLeftX, ty, tRoadW, tTexH);
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // Ground fog near the horizon
   const fogGrad = ctx.createLinearGradient(0, horizon, 0, horizon + 80);
   fogGrad.addColorStop(0, "rgba(100, 60, 180, 0.15)");
   fogGrad.addColorStop(0.5, "rgba(80, 40, 160, 0.06)");
@@ -183,162 +234,74 @@ function drawRoad(
   ctx.fillStyle = fogGrad;
   ctx.fillRect(0, horizon, w, 80);
 
-  // Scrolling ground grid for speed visualization
-  const gridSpacingWorld = 12;
-  const gridCount = 20;
-  ctx.save();
-  for (let gi = 0; gi < gridCount; gi++) {
-    const zWorld = ((gi * gridSpacingWorld) - (distance % gridSpacingWorld)) + 2;
-    if (zWorld < 2) continue;
-    const gScale = VIEW_DISTANCE / zWorld;
-    const yPos = horizon + CAMERA_HEIGHT * gScale;
-    if (yPos > h || yPos < horizon) continue;
-    const gDistFade = Math.min(1, 2.0 / (gi * 0.3 + 1));
-    ctx.strokeStyle = `rgba(60, 30, 120, ${gDistFade * 0.12})`;
-    ctx.lineWidth = Math.max(0.3, gScale * 0.003);
-    const roadEdgeL = w / 2 - roadHalf * gScale;
-    const roadEdgeR = w / 2 + roadHalf * gScale;
-    ctx.beginPath(); ctx.moveTo(0, yPos); ctx.lineTo(roadEdgeL - 5, yPos); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(roadEdgeR + 5, yPos); ctx.lineTo(w, yPos); ctx.stroke();
-  }
-  ctx.restore();
-
-  // Draw road segments from far to near
+  // ── Neon edge lines and lane dividers (segment-based, capped at z>3) ──
+  const MIN_DETAIL_Z = 3;
   for (let i = ROAD_SEGMENT_COUNT; i > 0; i--) {
-    const zFar = i * 4;
-    const zNear = (i - 1) * 4 + 0.1;
+    const segZFar = i * 4;
+    const segZNear = Math.max(MIN_DETAIL_Z, (i - 1) * 4);
+    if (segZNear >= segZFar) continue;
 
-    const farScale = VIEW_DISTANCE / zFar;
-    const nearScale = VIEW_DISTANCE / zNear;
+    const sFarScale = VIEW_DISTANCE / segZFar;
+    const sNearScale = VIEW_DISTANCE / segZNear;
+    const sFarY = horizon + CAMERA_HEIGHT * sFarScale;
+    const sNearY = horizon + CAMERA_HEIGHT * sNearScale;
+    if (sNearY < horizon || sFarY > h + 10) continue;
 
-    const farY = horizon + CAMERA_HEIGHT * farScale;
-    const nearY = horizon + CAMERA_HEIGHT * nearScale;
+    const sFarLeftX = w / 2 - roadHalf * sFarScale;
+    const sFarRightX = w / 2 + roadHalf * sFarScale;
+    const sNearLeftX = w / 2 - roadHalf * sNearScale;
+    const sNearRightX = w / 2 + roadHalf * sNearScale;
 
-    if (nearY < horizon) continue;
-    if (farY > h + 10) continue;
-
-    const farLeftX = w / 2 - roadHalf * farScale;
-    const farRightX = w / 2 + roadHalf * farScale;
-    const nearLeftX = w / 2 - roadHalf * nearScale;
-    const nearRightX = w / 2 + roadHalf * nearScale;
-
-    // Alternating road shading for depth
     const stripeIndex = Math.floor((distance + i * 4) / ROAD_STRIPE_LENGTH);
-
-    // Road surface: dark base fill
-    ctx.fillStyle = "rgba(10, 6, 24, 0.98)";
-    ctx.beginPath();
-    ctx.moveTo(farLeftX, farY);
-    ctx.lineTo(farRightX, farY);
-    ctx.lineTo(nearRightX, nearY);
-    ctx.lineTo(nearLeftX, nearY);
-    ctx.closePath();
-    ctx.fill();
-
-    // Road texture overlay (if loaded)
-    if (assets?.roadTexture) {
-      const texImg = assets.roadTexture;
-      const segH = Math.abs(nearY - farY);
-      if (segH > 0.5) {
-        ctx.save();
-        // Clip to road trapezoid
-        ctx.beginPath();
-        ctx.moveTo(farLeftX, farY);
-        ctx.lineTo(farRightX, farY);
-        ctx.lineTo(nearRightX, nearY);
-        ctx.lineTo(nearLeftX, nearY);
-        ctx.closePath();
-        ctx.clip();
-
-        // Map texture: stretch to road width at near edge, scroll with distance
-        const nearRoadW = nearRightX - nearLeftX;
-        const texAspect = texImg.height / texImg.width;
-        const texDrawH = nearRoadW * texAspect;
-        // Scroll: tile vertically based on distance
-        const texScroll = (distance * 8) % texDrawH;
-        const drawX = nearLeftX;
-
-        // Draw tiled texture strips to cover the segment
-        ctx.globalAlpha = 0.35;
-        for (let ty = farY - texScroll - texDrawH; ty < nearY + texDrawH; ty += texDrawH) {
-          ctx.drawImage(texImg, drawX, ty, nearRoadW, texDrawH);
-        }
-        ctx.globalAlpha = 1;
-        ctx.restore();
-      }
-    }
 
     // Edge glow intensity fades with distance
     const edgeAlpha = Math.min(0.7, 1.5 / (i * 0.25 + 1));
-    const edgeWidth = Math.max(0.5, 2.0 * nearScale * 0.007);
+    const edgeWidth = Math.max(0.5, 2.0 * sNearScale * 0.007);
 
-    // Left edge: cyan neon line
+    // Left edge: cyan neon
     ctx.save();
     ctx.shadowColor = "#00e5ff";
     ctx.shadowBlur = Math.min(12, edgeWidth * 6) * (0.8 + 0.2 * Math.sin(distance * 0.05 + i * 0.3));
     ctx.strokeStyle = `rgba(0, 229, 255, ${edgeAlpha * 0.6})`;
     ctx.lineWidth = edgeWidth;
     ctx.beginPath();
-    ctx.moveTo(farLeftX, farY);
-    ctx.lineTo(nearLeftX, nearY);
+    ctx.moveTo(sFarLeftX, sFarY);
+    ctx.lineTo(sNearLeftX, sNearY);
     ctx.stroke();
     ctx.restore();
 
-    // Right edge: magenta/purple neon line
+    // Right edge: magenta neon
     ctx.save();
     ctx.shadowColor = "#d050ff";
     ctx.shadowBlur = Math.min(12, edgeWidth * 6) * (0.8 + 0.2 * Math.sin(distance * 0.05 + i * 0.3 + 1.5));
     ctx.strokeStyle = `rgba(208, 80, 255, ${edgeAlpha * 0.6})`;
     ctx.lineWidth = edgeWidth;
     ctx.beginPath();
-    ctx.moveTo(farRightX, farY);
-    ctx.lineTo(nearRightX, nearY);
+    ctx.moveTo(sFarRightX, sFarY);
+    ctx.lineTo(sNearRightX, sNearY);
     ctx.stroke();
     ctx.restore();
 
-    // Lane dividers: glowing dashed cyan lines
+    // Lane dividers
     if (stripeIndex % 2 === 0) {
-      const dividerWidth = Math.max(0.5, 1.5 * nearScale * 0.008);
+      const dividerWidth = Math.max(0.5, 1.5 * sNearScale * 0.008);
       const dividerAlpha = edgeAlpha * 0.35;
-
       ctx.save();
       ctx.shadowColor = "#00d4ff";
       ctx.shadowBlur = Math.min(6, dividerWidth * 4);
       ctx.strokeStyle = `rgba(0, 212, 255, ${dividerAlpha})`;
       ctx.lineWidth = dividerWidth;
 
-      // Left lane divider
       const dividerLeft = (LANE_POSITIONS[0] + LANE_POSITIONS[1]) / 2;
-      const farDLX = w / 2 + dividerLeft * farScale;
-      const nearDLX = w / 2 + dividerLeft * nearScale;
       ctx.beginPath();
-      ctx.moveTo(farDLX, farY);
-      ctx.lineTo(nearDLX, nearY);
+      ctx.moveTo(w / 2 + dividerLeft * sFarScale, sFarY);
+      ctx.lineTo(w / 2 + dividerLeft * sNearScale, sNearY);
       ctx.stroke();
 
-      // Right lane divider
       const dividerRight = (LANE_POSITIONS[1] + LANE_POSITIONS[2]) / 2;
-      const farDRX = w / 2 + dividerRight * farScale;
-      const nearDRX = w / 2 + dividerRight * nearScale;
       ctx.beginPath();
-      ctx.moveTo(farDRX, farY);
-      ctx.lineTo(nearDRX, nearY);
-      ctx.stroke();
-
-      ctx.restore();
-    }
-
-    // Center line: thin amber pulse
-    if (stripeIndex % 3 === 0 && i < ROAD_SEGMENT_COUNT - 2) {
-      const centerAlpha = edgeAlpha * 0.15;
-      ctx.save();
-      ctx.shadowColor = "#ffc040";
-      ctx.shadowBlur = 4;
-      ctx.strokeStyle = `rgba(255, 200, 60, ${centerAlpha})`;
-      ctx.lineWidth = Math.max(0.3, nearScale * 0.004);
-      ctx.beginPath();
-      ctx.moveTo(w / 2, farY);
-      ctx.lineTo(w / 2, nearY);
+      ctx.moveTo(w / 2 + dividerRight * sFarScale, sFarY);
+      ctx.lineTo(w / 2 + dividerRight * sNearScale, sNearY);
       ctx.stroke();
       ctx.restore();
     }
