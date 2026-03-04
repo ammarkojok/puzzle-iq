@@ -189,10 +189,12 @@ function drawRoad(
   ctx.closePath();
   ctx.fill();
 
-  // Road texture overlay (single draw, clipped to road shape)
+  // Road texture overlay — iterate Z-space for uniform perspective sampling
   if (assets?.roadTexture) {
     const texImg = assets.roadTexture;
     ctx.save();
+
+    // Clip to road trapezoid for smooth diagonal edges
     ctx.beginPath();
     ctx.moveTo(farLeftX, farY);
     ctx.lineTo(farRightX, farY);
@@ -201,26 +203,49 @@ function drawRoad(
     ctx.closePath();
     ctx.clip();
 
-    // Draw texture tiles at multiple Z-depths for perspective feel
-    ctx.globalAlpha = 0.4;
-    const texAspect = texImg.height / texImg.width;
-    for (let ti = 0; ti < 12; ti++) {
-      const tZFar = 4 + ti * 16;
-      const tZNear = Math.max(1.5, tZFar - 16);
-      const tFarScale = VIEW_DISTANCE / tZFar;
-      const tNearScale = VIEW_DISTANCE / tZNear;
-      const tFarY = horizon + CAMERA_HEIGHT * tFarScale;
-      const tNearY = Math.min(h + 50, horizon + CAMERA_HEIGHT * tNearScale);
-      if (tFarY > h + 10 || tNearY < horizon) continue;
-      const tNearLeftX = w / 2 - roadHalf * tNearScale;
-      const tRoadW = (w / 2 + roadHalf * tNearScale) - tNearLeftX;
-      const tTexH = tRoadW * texAspect;
-      // Scroll texture away from player (ground passing under feet)
-      const scrollOffset = ((-distance * 6) % tTexH + tTexH) % tTexH;
-      for (let ty = tFarY - scrollOffset - tTexH; ty < tNearY; ty += tTexH) {
-        ctx.drawImage(texImg, tNearLeftX, ty, tRoadW, tTexH);
+    // Iterate in Z-space (uniform world steps → natural perspective density)
+    const zMin = 2.0;
+    const zMax = zFar;
+    const zSteps = 120;
+    const texScrollSpeed = 0.8;
+    const texTotalH = texImg.height;
+
+    for (let si = 0; si < zSteps; si++) {
+      // Linear Z from far to near
+      const zTop = zMax - (si / zSteps) * (zMax - zMin);
+      const zBot = zMax - ((si + 1) / zSteps) * (zMax - zMin);
+
+      const scaleTop = VIEW_DISTANCE / zTop;
+      const scaleBot = VIEW_DISTANCE / zBot;
+      const yTop = horizon + CAMERA_HEIGHT * scaleTop;
+      const yBot = horizon + CAMERA_HEIGHT * scaleBot;
+
+      if (yTop > h + 10 || yBot < horizon) continue;
+
+      const leftX = w / 2 - roadHalf * scaleBot;
+      const roadW = ROAD_WIDTH * scaleBot;
+
+      // Fade texture alpha near camera (bottom of screen) to hide stretching
+      const t = si / zSteps; // 0=far, 1=near
+      const fadeAlpha = t > 0.85 ? 0.35 * (1 - (t - 0.85) / 0.15) : 0.35;
+      ctx.globalAlpha = fadeAlpha;
+
+      // Map Z to texture source coordinate (scrolling with distance)
+      const zMid = (zTop + zBot) / 2;
+      const texSrcY = ((zMid * 0.5 + distance * texScrollSpeed) % texTotalH + texTotalH) % texTotalH;
+      const srcStripH = Math.max(1, (texTotalH / zSteps) * 1.5);
+      const drawH = Math.max(1, yBot - yTop + 1);
+
+      if (texSrcY + srcStripH <= texTotalH) {
+        ctx.drawImage(texImg, 0, texSrcY, texImg.width, srcStripH, leftX, yTop, roadW, drawH);
+      } else {
+        const firstH = texTotalH - texSrcY;
+        const ratio = firstH / srcStripH;
+        ctx.drawImage(texImg, 0, texSrcY, texImg.width, firstH, leftX, yTop, roadW, drawH * ratio);
+        ctx.drawImage(texImg, 0, 0, texImg.width, srcStripH - firstH, leftX, yTop + drawH * ratio, roadW, drawH * (1 - ratio));
       }
     }
+
     ctx.globalAlpha = 1;
     ctx.restore();
   }
@@ -233,91 +258,81 @@ function drawRoad(
   ctx.fillStyle = fogGrad;
   ctx.fillRect(0, horizon, w, 80);
 
-  // ── Neon edge lines and lane dividers (segment-based, capped at z>3) ──
+  // ── Continuous neon edge lines and lane dividers ──
   const MIN_DETAIL_Z = 3;
-  for (let i = ROAD_SEGMENT_COUNT; i > 0; i--) {
-    const segZFar = i * 4;
-    const segZNear = Math.max(MIN_DETAIL_Z, (i - 1) * 4);
-    if (segZNear >= segZFar) continue;
+  const polySteps = 40; // Number of points along each line
 
-    const sFarScale = VIEW_DISTANCE / segZFar;
-    const sNearScale = VIEW_DISTANCE / segZNear;
-    const sFarY = horizon + CAMERA_HEIGHT * sFarScale;
-    const sNearY = horizon + CAMERA_HEIGHT * sNearScale;
-    if (sNearY < horizon || sFarY > h + 10) continue;
-
-    const sFarLeftX = w / 2 - roadHalf * sFarScale;
-    const sFarRightX = w / 2 + roadHalf * sFarScale;
-    const sNearLeftX = w / 2 - roadHalf * sNearScale;
-    const sNearRightX = w / 2 + roadHalf * sNearScale;
-
-    // Edge glow intensity fades with distance
-    const edgeAlpha = Math.min(0.7, 1.5 / (i * 0.25 + 1));
-    const edgeWidth = Math.max(0.5, 2.0 * sNearScale * 0.007);
-
-    // Left edge: cyan neon
-    ctx.save();
-    ctx.shadowColor = "#00e5ff";
-    ctx.shadowBlur = Math.min(12, edgeWidth * 6) * (0.8 + 0.2 * Math.sin(distance * 0.05 + i * 0.3));
-    ctx.strokeStyle = `rgba(0, 229, 255, ${edgeAlpha * 0.6})`;
-    ctx.lineWidth = edgeWidth;
-    ctx.beginPath();
-    ctx.moveTo(sFarLeftX, sFarY);
-    ctx.lineTo(sNearLeftX, sNearY);
-    ctx.stroke();
-    ctx.restore();
-
-    // Right edge: magenta neon
-    ctx.save();
-    ctx.shadowColor = "#d050ff";
-    ctx.shadowBlur = Math.min(12, edgeWidth * 6) * (0.8 + 0.2 * Math.sin(distance * 0.05 + i * 0.3 + 1.5));
-    ctx.strokeStyle = `rgba(208, 80, 255, ${edgeAlpha * 0.6})`;
-    ctx.lineWidth = edgeWidth;
-    ctx.beginPath();
-    ctx.moveTo(sFarRightX, sFarY);
-    ctx.lineTo(sNearRightX, sNearY);
-    ctx.stroke();
-    ctx.restore();
-
-    // Lane dividers — always visible, bold enough to clearly show 3 lanes
-    {
-      const dividerWidth = Math.max(1, 2.5 * sNearScale * 0.008);
-      const dividerAlpha = edgeAlpha * 0.7;
-
-      const dividerLeft = (LANE_POSITIONS[0] + LANE_POSITIONS[1]) / 2;
-      const dividerRight = (LANE_POSITIONS[1] + LANE_POSITIONS[2]) / 2;
-
-      // Dark shadow line for contrast
-      ctx.save();
-      ctx.strokeStyle = `rgba(0, 0, 0, ${dividerAlpha * 0.5})`;
-      ctx.lineWidth = dividerWidth * 2.5;
-      ctx.beginPath();
-      ctx.moveTo(w / 2 + dividerLeft * sFarScale, sFarY);
-      ctx.lineTo(w / 2 + dividerLeft * sNearScale, sNearY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(w / 2 + dividerRight * sFarScale, sFarY);
-      ctx.lineTo(w / 2 + dividerRight * sNearScale, sNearY);
-      ctx.stroke();
-      ctx.restore();
-
-      // Bright neon divider on top
-      ctx.save();
-      ctx.shadowColor = "#d050ff";
-      ctx.shadowBlur = Math.min(10, dividerWidth * 5);
-      ctx.strokeStyle = `rgba(208, 80, 255, ${dividerAlpha})`;
-      ctx.lineWidth = dividerWidth;
-      ctx.beginPath();
-      ctx.moveTo(w / 2 + dividerLeft * sFarScale, sFarY);
-      ctx.lineTo(w / 2 + dividerLeft * sNearScale, sNearY);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(w / 2 + dividerRight * sFarScale, sFarY);
-      ctx.lineTo(w / 2 + dividerRight * sNearScale, sNearY);
-      ctx.stroke();
-      ctx.restore();
+  // Helper: build array of (x,y) points for a world-X line from far to near
+  function buildPerspectiveLine(worldX: number): Array<{x: number; y: number}> {
+    const points: Array<{x: number; y: number}> = [];
+    for (let si = 0; si <= polySteps; si++) {
+      const t = si / polySteps;
+      const z = MIN_DETAIL_Z + (zFar - MIN_DETAIL_Z) * (1 - t); // far to near
+      const scale = VIEW_DISTANCE / z;
+      const px = w / 2 + worldX * scale;
+      const py = horizon + CAMERA_HEIGHT * scale;
+      if (py >= horizon && py <= h + 10) {
+        points.push({ x: px, y: py });
+      }
     }
+    return points;
   }
+
+  function strokePolyline(points: Array<{x: number; y: number}>) {
+    if (points.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+      ctx.lineTo(points[i].x, points[i].y);
+    }
+    ctx.stroke();
+  }
+
+  // Edge lines
+  const leftEdgePoints = buildPerspectiveLine(-roadHalf);
+  const rightEdgePoints = buildPerspectiveLine(roadHalf);
+
+  // Left edge: cyan neon
+  ctx.save();
+  ctx.shadowColor = "#00e5ff";
+  ctx.shadowBlur = 10;
+  ctx.strokeStyle = "rgba(0, 229, 255, 0.5)";
+  ctx.lineWidth = 1.5;
+  strokePolyline(leftEdgePoints);
+  ctx.restore();
+
+  // Right edge: magenta neon
+  ctx.save();
+  ctx.shadowColor = "#d050ff";
+  ctx.shadowBlur = 10;
+  ctx.strokeStyle = "rgba(208, 80, 255, 0.5)";
+  ctx.lineWidth = 1.5;
+  strokePolyline(rightEdgePoints);
+  ctx.restore();
+
+  // Lane dividers (between lanes)
+  const dividerLeft = (LANE_POSITIONS[0] + LANE_POSITIONS[1]) / 2;  // -1.4
+  const dividerRight = (LANE_POSITIONS[1] + LANE_POSITIONS[2]) / 2; // 1.4
+  const leftDividerPoints = buildPerspectiveLine(dividerLeft);
+  const rightDividerPoints = buildPerspectiveLine(dividerRight);
+
+  // Dark shadow backing for dividers
+  ctx.save();
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.4)";
+  ctx.lineWidth = 3;
+  strokePolyline(leftDividerPoints);
+  strokePolyline(rightDividerPoints);
+  ctx.restore();
+
+  // Bright magenta dividers
+  ctx.save();
+  ctx.shadowColor = "#d050ff";
+  ctx.shadowBlur = 8;
+  ctx.strokeStyle = "rgba(208, 80, 255, 0.6)";
+  ctx.lineWidth = 1.5;
+  strokePolyline(leftDividerPoints);
+  strokePolyline(rightDividerPoints);
+  ctx.restore();
 
   // Speed chevrons on road
   if (speed > 40) {
@@ -956,13 +971,6 @@ function drawCharacter(
   const bounce = char3dCanvas ? 0 : Math.abs(Math.sin(runPhase)) * baseSize * 0.15;
 
   ctx.save();
-
-  // Ground shadow beneath the character (scales with speed)
-  const shadowScale = 1.0 + Math.min(0.5, speed / 300);
-  ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-  ctx.beginPath();
-  ctx.ellipse(x, y + 3, baseSize * shadowScale, baseSize * 0.15, 0, 0, Math.PI * 2);
-  ctx.fill();
 
   // Dual-color neon reflection matching road edges
   ctx.save();
