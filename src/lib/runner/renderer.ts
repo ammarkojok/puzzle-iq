@@ -260,12 +260,12 @@ function drawRoad(
     ctx.closePath();
     ctx.fill();
 
-    // Neon road edges - subtle purple glow lines
-    const edgeAlpha = Math.min(1, 2 / (i * 0.25 + 1));
-    const edgeWidth = Math.max(0.5, 2 * nearScale * 0.01);
+    // Subtle neon road edges
+    const edgeAlpha = Math.min(0.5, 1.2 / (i * 0.3 + 1));
+    const edgeWidth = Math.max(0.5, 1.5 * nearScale * 0.006);
 
     // Left edge
-    ctx.strokeStyle = `rgba(160, 80, 255, ${edgeAlpha * 0.5})`;
+    ctx.strokeStyle = `rgba(140, 70, 255, ${edgeAlpha * 0.4})`;
     ctx.lineWidth = edgeWidth;
     ctx.beginPath();
     ctx.moveTo(farLeftX, farY);
@@ -273,7 +273,7 @@ function drawRoad(
     ctx.stroke();
 
     // Right edge
-    ctx.strokeStyle = `rgba(160, 80, 255, ${edgeAlpha * 0.5})`;
+    ctx.strokeStyle = `rgba(140, 70, 255, ${edgeAlpha * 0.4})`;
     ctx.beginPath();
     ctx.moveTo(farRightX, farY);
     ctx.lineTo(nearRightX, nearY);
@@ -305,8 +305,8 @@ function drawRoad(
 
     // Center dashed line (yellow/amber, like a real road)
     if (stripeIndex % 3 === 0 && i < ROAD_SEGMENT_COUNT - 2) {
-      ctx.strokeStyle = `rgba(255, 200, 50, ${edgeAlpha * 0.2})`;
-      ctx.lineWidth = Math.max(0.5, 1.5 * nearScale * 0.01);
+      ctx.strokeStyle = `rgba(255, 200, 50, ${edgeAlpha * 0.12})`;
+      ctx.lineWidth = Math.max(0.3, nearScale * 0.005);
       const farCX = w / 2;
       const nearCX = w / 2;
       ctx.beginPath();
@@ -351,14 +351,15 @@ function drawGate(
   const laneX = LANE_POSITIONS[entity.lane];
   const screen = projectToScreen({ x: laneX, y: 0, z: entity.z }, w, h);
 
-  if (screen.y < h * HORIZON_RATIO || screen.scale < 0.3) return;
+  if (screen.y < h * HORIZON_RATIO) return;
 
   const hex = getColorHex(entity.color);
   const glow = getColorGlow(entity.color);
-  const gateWidth = entity.width * screen.scale;
-  const gateHeight = entity.height * screen.scale;
+  // Ensure gates are always visible with a minimum size
+  const gateWidth = Math.max(8, entity.width * screen.scale);
+  const gateHeight = Math.max(12, entity.height * screen.scale);
 
-  if (gateWidth < 2) return;
+  if (gateWidth < 3 || screen.scale < 0.15) return;
 
   const x = screen.x;
   const y = screen.y;
@@ -499,9 +500,9 @@ function drawCharacter(
 ) {
   const screen = projectToScreen({ x: laneX, y: 0, z: CHARACTER_Z }, w, h);
 
-  // Character size: cap at ~10-12% of screen height to avoid
-  // the scale-based value blowing up at close z distances.
-  const baseSize = Math.min(h * 0.035, Math.max(12, screen.scale * 0.25));
+  // Character size: target ~15% of screen height for prominence (like Subway Surfers).
+  // Use h-based sizing so the character is always clearly visible.
+  const baseSize = h * 0.055;
   const x = screen.x;
   const y = screen.y;
 
