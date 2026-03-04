@@ -10,7 +10,6 @@ import {
   HORIZON_RATIO,
   ROAD_WIDTH,
   ROAD_SEGMENT_COUNT,
-  ROAD_STRIPE_LENGTH,
   LANE_POSITIONS,
   VIEW_DISTANCE,
   CAMERA_HEIGHT,
@@ -216,8 +215,8 @@ function drawRoad(
       const tNearLeftX = w / 2 - roadHalf * tNearScale;
       const tRoadW = (w / 2 + roadHalf * tNearScale) - tNearLeftX;
       const tTexH = tRoadW * texAspect;
-      // Scroll texture with distance
-      const scrollOffset = (distance * 6) % tTexH;
+      // Scroll texture away from player (ground passing under feet)
+      const scrollOffset = ((-distance * 6) % tTexH + tTexH) % tTexH;
       for (let ty = tFarY - scrollOffset - tTexH; ty < tNearY; ty += tTexH) {
         ctx.drawImage(texImg, tNearLeftX, ty, tRoadW, tTexH);
       }
@@ -252,8 +251,6 @@ function drawRoad(
     const sNearLeftX = w / 2 - roadHalf * sNearScale;
     const sNearRightX = w / 2 + roadHalf * sNearScale;
 
-    const stripeIndex = Math.floor((distance + i * 4) / ROAD_STRIPE_LENGTH);
-
     // Edge glow intensity fades with distance
     const edgeAlpha = Math.min(0.7, 1.5 / (i * 0.25 + 1));
     const edgeWidth = Math.max(0.5, 2.0 * sNearScale * 0.007);
@@ -282,23 +279,38 @@ function drawRoad(
     ctx.stroke();
     ctx.restore();
 
-    // Lane dividers
-    if (stripeIndex % 2 === 0) {
-      const dividerWidth = Math.max(0.5, 1.5 * sNearScale * 0.008);
-      const dividerAlpha = edgeAlpha * 0.35;
-      ctx.save();
-      ctx.shadowColor = "#00d4ff";
-      ctx.shadowBlur = Math.min(6, dividerWidth * 4);
-      ctx.strokeStyle = `rgba(0, 212, 255, ${dividerAlpha})`;
-      ctx.lineWidth = dividerWidth;
+    // Lane dividers — always visible, bold enough to clearly show 3 lanes
+    {
+      const dividerWidth = Math.max(1, 2.5 * sNearScale * 0.008);
+      const dividerAlpha = edgeAlpha * 0.7;
 
       const dividerLeft = (LANE_POSITIONS[0] + LANE_POSITIONS[1]) / 2;
+      const dividerRight = (LANE_POSITIONS[1] + LANE_POSITIONS[2]) / 2;
+
+      // Dark shadow line for contrast
+      ctx.save();
+      ctx.strokeStyle = `rgba(0, 0, 0, ${dividerAlpha * 0.5})`;
+      ctx.lineWidth = dividerWidth * 2.5;
       ctx.beginPath();
       ctx.moveTo(w / 2 + dividerLeft * sFarScale, sFarY);
       ctx.lineTo(w / 2 + dividerLeft * sNearScale, sNearY);
       ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(w / 2 + dividerRight * sFarScale, sFarY);
+      ctx.lineTo(w / 2 + dividerRight * sNearScale, sNearY);
+      ctx.stroke();
+      ctx.restore();
 
-      const dividerRight = (LANE_POSITIONS[1] + LANE_POSITIONS[2]) / 2;
+      // Bright neon divider on top
+      ctx.save();
+      ctx.shadowColor = "#d050ff";
+      ctx.shadowBlur = Math.min(10, dividerWidth * 5);
+      ctx.strokeStyle = `rgba(208, 80, 255, ${dividerAlpha})`;
+      ctx.lineWidth = dividerWidth;
+      ctx.beginPath();
+      ctx.moveTo(w / 2 + dividerLeft * sFarScale, sFarY);
+      ctx.lineTo(w / 2 + dividerLeft * sNearScale, sNearY);
+      ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(w / 2 + dividerRight * sFarScale, sFarY);
       ctx.lineTo(w / 2 + dividerRight * sNearScale, sNearY);

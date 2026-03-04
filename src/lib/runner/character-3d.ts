@@ -18,7 +18,7 @@ export type Character3D = {
   ready: boolean;
 };
 
-const RENDER_SIZE = 384; // Offscreen canvas resolution
+const RENDER_SIZE = 512; // Offscreen canvas resolution
 
 export async function createCharacter3D(): Promise<Character3D> {
   // ── Setup offscreen renderer ───────────────────────────────
@@ -41,7 +41,7 @@ export async function createCharacter3D(): Promise<Character3D> {
 
   // ── Camera - positioned behind and above character ─────────
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-  camera.position.set(0, 2.2, -3.2);
+  camera.position.set(0, 2.2, -4.0);
   camera.lookAt(0, 0.7, 0.5);
 
   // ── Lighting - neon cyberpunk rim lights ────────────────────
