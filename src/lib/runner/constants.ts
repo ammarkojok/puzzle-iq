@@ -6,9 +6,9 @@ export const LANE_WIDTH = 1.8; // World units between lane centers
 export const LANE_POSITIONS = [-LANE_WIDTH, 0, LANE_WIDTH]; // Left, Center, Right
 
 // Camera & perspective
-export const HORIZON_RATIO = 0.35; // 35% from top
-export const CAMERA_HEIGHT = 1.2;
-export const VIEW_DISTANCE = 300;
+export const HORIZON_RATIO = 0.38; // 38% from top - slightly lower horizon for more road
+export const CAMERA_HEIGHT = 1.5;
+export const VIEW_DISTANCE = 280;
 export const ROAD_WIDTH = 6.0; // World units total road width
 
 // Speed settings
@@ -42,18 +42,18 @@ export const DIFFICULTY_STAGES = [
 
 // Character
 export const CHARACTER_Y = 0; // Ground level
-export const CHARACTER_Z = 8; // Fixed world Z position for character
+export const CHARACTER_Z = 5; // Closer to camera for larger, more prominent character
 export const ANIM_FRAME_DURATION = 0.12; // seconds per frame
 
-// Collision
-export const GATE_COLLECT_Z_THRESHOLD = 4; // How close Z must be to collect
+// Collision - adjusted to match closer CHARACTER_Z
+export const GATE_COLLECT_Z_THRESHOLD = 3;
 
 // Particles
 export const MAX_PARTICLES = 30;
 export const PARTICLE_LIFETIME = 0.8; // seconds
 
 // Road visual
-export const ROAD_SEGMENT_COUNT = 60;
+export const ROAD_SEGMENT_COUNT = 50;
 export const ROAD_STRIPE_LENGTH = 8; // World units per stripe
 
 // Swipe input

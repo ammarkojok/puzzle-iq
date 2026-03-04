@@ -29,6 +29,7 @@ import {
 } from "./particles";
 import { render, type RenderState } from "./renderer";
 import { projectToScreen } from "./perspective";
+import { MAX_PIXEL_RATIO } from "./constants";
 
 // ── Game State ────────────────────────────────────────────────────
 
@@ -359,11 +360,14 @@ export function createGameLoop(
         state = { ...state, spawner: newSpawner };
       }
 
-      // Collision detection
+      // Collision detection - use logical (CSS) dimensions, not physical pixels
+      const dpr = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+      const logicalW = canvas.width / dpr;
+      const logicalH = canvas.height / dpr;
       state = checkCollisions(
         state,
-        canvas.width,
-        canvas.height,
+        logicalW,
+        logicalH,
         callbacks.onGateCollect,
         callbacks.onTubeComplete
       );
