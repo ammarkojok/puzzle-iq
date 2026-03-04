@@ -1,11 +1,11 @@
 // ── Asset Loader & Cache ───────────────────────────────────────────
+// Loads and caches the neon cyberpunk game assets.
+// Only three assets are needed: city skyline, character sprite, gate arch.
 
 export type GameAssets = {
-  background: HTMLImageElement;
   cityLayer: HTMLImageElement;
-  characterFrames: HTMLImageElement[];
+  character: HTMLImageElement;
   gateArch: HTMLImageElement;
-  particleStar: HTMLImageElement;
   loaded: boolean;
 };
 
@@ -26,23 +26,16 @@ let cachedAssets: GameAssets | null = null;
 export async function loadGameAssets(): Promise<GameAssets> {
   if (cachedAssets?.loaded) return cachedAssets;
 
-  const [background, cityLayer, char1, char2, char3, gateArch, particleStar] =
-    await Promise.all([
-      loadImage("/assets/runner/runner-bg.png"),
-      loadImage("/assets/runner/bg-city-layer-1.png"),
-      loadImage("/assets/runner/character-run-1.png"),
-      loadImage("/assets/runner/character-run-2.png"),
-      loadImage("/assets/runner/character-run-3.png"),
-      loadImage("/assets/runner/gate-arch.png"),
-      loadImage("/assets/runner/particle-star.png"),
-    ]);
+  const [cityLayer, character, gateArch] = await Promise.all([
+    loadImage("/assets/runner/bg-city-layer-1.png"),
+    loadImage("/assets/runner/character-run-1.png"),
+    loadImage("/assets/runner/gate-arch.png"),
+  ]);
 
   cachedAssets = {
-    background,
     cityLayer,
-    characterFrames: [char1, char2, char3],
+    character,
     gateArch,
-    particleStar,
     loaded: true,
   };
 
