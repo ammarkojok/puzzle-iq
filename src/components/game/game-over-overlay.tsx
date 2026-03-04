@@ -8,10 +8,18 @@ import { Confetti } from "./confetti";
 interface GameOverOverlayProps {
   iq: number;
   tubesCompleted: number;
+  distance: number;
+  gatesCollected: number;
   onRestart: () => void;
 }
 
-export function GameOverOverlay({ iq, tubesCompleted, onRestart }: GameOverOverlayProps) {
+export function GameOverOverlay({
+  iq,
+  tubesCompleted,
+  distance,
+  gatesCollected,
+  onRestart,
+}: GameOverOverlayProps) {
   const [showShareCard, setShowShareCard] = useState(false);
   const percentile = getPercentile(iq);
   const milestone = getMilestone(iq);
@@ -42,14 +50,23 @@ export function GameOverOverlay({ iq, tubesCompleted, onRestart }: GameOverOverl
         >
           <h2 className="text-2xl font-bold">Game Over</h2>
 
-          <div className="flex w-full justify-around text-center text-sm text-white/50">
+          {/* Stats grid */}
+          <div className="grid grid-cols-2 gap-4 w-full text-center text-sm text-white/50">
             <div>
-              <div className="text-2xl font-bold text-white">{tubesCompleted}</div>
-              <div>Tubes Solved</div>
+              <div className="text-2xl font-bold text-white">{Math.floor(distance)}m</div>
+              <div>Distance</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-purple-400">{formatIQ(iq)}</div>
               <div>Final IQ</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-white">{tubesCompleted}</div>
+              <div>Tubes</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-white">{gatesCollected}</div>
+              <div>Gates</div>
             </div>
           </div>
 

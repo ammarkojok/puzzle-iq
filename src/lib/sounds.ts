@@ -24,7 +24,7 @@ export function isMuted(): boolean {
   return muted;
 }
 
-function playTone(
+export function playTone(
   freq: number,
   duration: number,
   type: OscillatorType = "sine",
@@ -47,7 +47,7 @@ function playTone(
   osc.stop(ctx.currentTime + duration);
 }
 
-function playNoise(duration: number, volume = 0.08) {
+export function playNoise(duration: number, volume = 0.08) {
   if (muted) return;
   const ctx = getCtx();
   if (!ctx) return;
@@ -105,4 +105,33 @@ export function playError() {
 
 export function playIQTick() {
   playTone(1200, 0.03, "sine", 0.06);
+}
+
+// ── Runner Game Sounds ────────────────────────────────────────────
+
+export function playGateCollect() {
+  playTone(600, 0.06, "sine", 0.1);
+  playTone(800, 0.04, "sine", 0.06);
+}
+
+export function playLaneSwitch() {
+  playTone(400, 0.04, "sine", 0.06);
+}
+
+export function playSpeedBoost() {
+  playTone(500, 0.1, "sine", 0.08);
+  setTimeout(() => playTone(700, 0.1, "sine", 0.08), 60);
+  setTimeout(() => playTone(900, 0.15, "sine", 0.06), 120);
+}
+
+export function playCombo(streak: number) {
+  const baseFreq = 600 + streak * 100;
+  playTone(baseFreq, 0.08, "sine", 0.1);
+  setTimeout(() => playTone(baseFreq + 200, 0.1, "sine", 0.08), 50);
+}
+
+export function playGameOver() {
+  playTone(400, 0.2, "sine", 0.1);
+  setTimeout(() => playTone(300, 0.25, "sine", 0.1), 150);
+  setTimeout(() => playTone(200, 0.4, "sine", 0.08), 300);
 }

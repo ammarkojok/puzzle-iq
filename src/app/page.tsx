@@ -54,7 +54,7 @@ export default function HomePage() {
           className="text-6xl mb-5 animate-[float-up_0.6s_ease-out_forwards]"
           style={{ opacity: 0, animationDelay: "100ms" }}
         >
-          🧠
+          🏃‍♂️
         </div>
 
         <AnimatedTitle />
@@ -63,7 +63,7 @@ export default function HomePage() {
           className="text-white/40 text-sm mt-3 mb-8 animate-[float-up_0.5s_ease-out_forwards]"
           style={{ opacity: 0, animationDelay: "600ms" }}
         >
-          Endless color-sorting. How far can you go?
+          Run. Collect colors. Sort tubes. How smart are you?
         </p>
 
         {/* Best run stats for returning players */}
@@ -108,7 +108,7 @@ export default function HomePage() {
           href="/play"
           className="group relative inline-flex items-center justify-center w-full max-w-[280px] py-4 px-8 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 rounded-2xl font-bold text-lg transition-all duration-200 active:scale-95 animate-pulse-cta"
         >
-          {hasPlayed ? "Play Again" : "Start Playing"}
+          {hasPlayed ? "Play Again" : "Start Running"}
           <svg
             className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform"
             fill="none"
@@ -134,7 +134,7 @@ export default function HomePage() {
           style={{ opacity: 0, animationDelay: "1000ms" }}
         >
           <div className="flex flex-col items-center">
-            <span className="text-white/50 font-semibold text-base">∞</span>
+            <span className="text-white/50 font-semibold text-base">🏃</span>
             <span>Endless</span>
           </div>
           <div className="w-px h-8 bg-white/10" />
@@ -144,8 +144,8 @@ export default function HomePage() {
           </div>
           <div className="w-px h-8 bg-white/10" />
           <div className="flex flex-col items-center">
-            <span className="text-white/50 font-semibold text-base">1%</span>
-            <span>Genius</span>
+            <span className="text-white/50 font-semibold text-base">🧠</span>
+            <span>IQ Test</span>
           </div>
         </div>
       </div>
