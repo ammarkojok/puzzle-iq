@@ -1,23 +1,24 @@
-// ── Gate Spawner ───────────────────────────────────────────────────
+// ── Gate Spawner (Distance-Based) ─────────────────────────────────
+// Spawns gate rows based on distance traveled, NOT Z position.
+// This prevents the burst-spawning bug where gates pile up.
 
 import { GAME_COLORS } from "@/lib/colors";
 import { type Entity, createGate } from "./entities";
 import {
   DIFFICULTY_STAGES,
-  GATE_SPAWN_DISTANCE,
-  MIN_GATE_SPAWN_DISTANCE,
+  GATE_SPAWN_Z,
   LANE_COUNT,
 } from "./constants";
 
 export type SpawnerState = {
-  nextSpawnZ: number;
-  lastColors: string[];
+  /** Distance at which we last spawned a gate row */
+  lastSpawnDistance: number;
 };
 
 export function createSpawner(): SpawnerState {
   return {
-    nextSpawnZ: 120, // First gates appear at Z=120
-    lastColors: [],
+    // Negative value so the first gate spawns after ~1 second of running
+    lastSpawnDistance: -80,
   };
 }
 
@@ -49,73 +50,63 @@ function randomColor(colors: string[]): string {
 }
 
 /**
- * Spawn new gate entities if needed.
- * Returns new entities and updated spawner state.
+ * Spawn a new gate row if enough distance has been traveled.
+ * Returns at most ONE row per call. No burst spawning possible.
  */
 export function spawnGates(
   spawner: SpawnerState,
-  cameraZ: number,
   distance: number,
-  speed: number
+  speed: number,
+  existingEntities: Entity[]
 ): { entities: Entity[]; spawner: SpawnerState } {
   const stage = getDifficultyStage(distance);
   const colors = getAvailableColors(distance);
-  const newEntities: Entity[] = [];
-  let { nextSpawnZ } = spawner;
 
-  // Spawn distance decreases with speed (more frequent at higher speed)
-  const spawnDist = Math.max(
-    MIN_GATE_SPAWN_DISTANCE,
-    GATE_SPAWN_DISTANCE * (1 - (speed - 60) / 600)
-  );
+  // Convert time interval to distance interval
+  // gateInterval is in seconds, speed is in world units/second
+  const distGap = speed * stage.gateInterval;
 
-  // Spawn gates ahead of camera.
-  // Gates live in camera-relative Z space (high Z = far away, moves toward 0).
-  // When nextSpawnZ exceeds the visible range, reset it to keep spawning.
-  const spawnHorizon = 300;
-
-  // If we've already spawned past the horizon, reset to the next spawn distance
-  // (NOT a random close value, which would cause 3-4 rows to burst in one frame)
-  if (nextSpawnZ > spawnHorizon) {
-    nextSpawnZ = spawnDist;
+  // Not time to spawn yet?
+  if (distance - spawner.lastSpawnDistance < distGap) {
+    return { entities: [], spawner };
   }
 
-  // Cap rows spawned per frame to prevent burst spawning
-  const MAX_ROWS_PER_FRAME = 2;
-  let rowsSpawned = 0;
+  // Safety: don't spawn if gates are already near the spawn point
+  const MIN_Z_GAP = 50;
+  const tooClose = existingEntities.some(
+    (e) => !e.collected && e.type === "gate" && Math.abs(e.z - GATE_SPAWN_Z) < MIN_Z_GAP
+  );
+  if (tooClose) {
+    return { entities: [], spawner };
+  }
 
-  while (nextSpawnZ < spawnHorizon && rowsSpawned < MAX_ROWS_PER_FRAME) {
-    // Decide how many gates in this row (1 to maxGatesPerRow)
-    const gateCount =
-      1 + Math.floor(Math.random() * stage.maxGatesPerRow);
+  // Determine gate count for this row
+  // maxGatesPerRow=1 → always 1, maxGatesPerRow=2 → 1 or 2, etc.
+  const gateCount = 1 + Math.floor(Math.random() * stage.maxGatesPerRow);
 
-    // Pick random lanes (no duplicates)
-    const availableLanes = [0, 1, 2];
-    const chosenLanes: number[] = [];
-    for (let i = 0; i < Math.min(gateCount, LANE_COUNT); i++) {
-      const idx = Math.floor(Math.random() * availableLanes.length);
-      chosenLanes.push(availableLanes[idx]);
-      availableLanes.splice(idx, 1);
-    }
+  // Pick random lanes (no duplicates)
+  const availableLanes = [0, 1, 2];
+  const chosenLanes: number[] = [];
+  for (let i = 0; i < Math.min(gateCount, LANE_COUNT); i++) {
+    const idx = Math.floor(Math.random() * availableLanes.length);
+    chosenLanes.push(availableLanes[idx]);
+    availableLanes.splice(idx, 1);
+  }
 
-    // Ensure at least one lane is free (player must have an escape)
-    // Only enforce if we have all 3 lanes covered
-    if (chosenLanes.length >= LANE_COUNT) {
-      chosenLanes.pop();
-    }
+  // Ensure at least one lane is free (player must always have an escape)
+  if (chosenLanes.length >= LANE_COUNT) {
+    chosenLanes.pop();
+  }
 
-    // Create gate entities
-    for (const lane of chosenLanes) {
-      const color = randomColor(colors);
-      newEntities.push(createGate(lane, nextSpawnZ, color));
-    }
-
-    nextSpawnZ += spawnDist;
-    rowsSpawned++;
+  // Create gate entities at the fixed spawn Z
+  const newEntities: Entity[] = [];
+  for (const lane of chosenLanes) {
+    const color = randomColor(colors);
+    newEntities.push(createGate(lane, GATE_SPAWN_Z, color));
   }
 
   return {
     entities: newEntities,
-    spawner: { ...spawner, nextSpawnZ },
+    spawner: { lastSpawnDistance: distance },
   };
 }

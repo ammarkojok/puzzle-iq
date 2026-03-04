@@ -345,12 +345,12 @@ export function createGameLoop(
       state = updateEntities(state, dt);
       state = updateFlash(state, dt);
 
-      // Spawn new gates
+      // Spawn new gates (distance-based, passes existing entities to prevent overlap)
       const { entities: newEntities, spawner: newSpawner } = spawnGates(
         state.spawner,
-        0, // camera Z is always 0
         state.distance,
-        state.speed
+        state.speed,
+        state.entities
       );
       if (newEntities.length > 0) {
         state = {
