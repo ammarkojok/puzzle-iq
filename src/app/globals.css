@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-inter);
+  --color-background: #0f0b2e;
+  --color-foreground: #ffffff;
+  --color-card: rgba(255, 255, 255, 0.06);
+  --color-card-foreground: #ffffff;
+  --color-primary: #b14eff;
+  --color-primary-foreground: #ffffff;
+  --color-muted: rgba(255, 255, 255, 0.1);
+  --color-muted-foreground: rgba(255, 255, 255, 0.5);
+  --color-border: rgba(255, 255, 255, 0.1);
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background: linear-gradient(145deg, #0f0b2e 0%, #1a1145 50%, #0d1b3e 100%);
+    min-height: 100dvh;
+  }
+}
+
+/* ===== Tube animations ===== */
+
+@keyframes tube-shimmer {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(46, 213, 115, 0.3), inset 0 0 6px rgba(46, 213, 115, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(46, 213, 115, 0.5), inset 0 0 12px rgba(46, 213, 115, 0.2);
+  }
+}
+
+@keyframes tube-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+@keyframes tube-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.12); }
+  70% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+@keyframes segment-pour-out {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-40px) scale(0.8); }
+}
+
+@keyframes segment-pour-in {
+  0% { opacity: 0; transform: translateY(-40px) scale(0.8); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes glow-ring {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.4); }
+}
+
+@keyframes hint-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(177, 78, 255, 0); transform: scale(1); }
+  50% { box-shadow: 0 0 20px 4px rgba(177, 78, 255, 0.4); transform: scale(1.03); }
+}
+
+/* ===== Confetti ===== */
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-10px) translateX(0) rotate(0deg);
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) translateX(var(--drift, 0px)) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+/* ===== Modal ===== */
+
+@keyframes modal-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes star-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes float-up {
+  0% { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes float-up-fade {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-20px); }
+}
+
+@keyframes shimmer-badge {
+  0%, 100% {
+    background-position: -100% center;
+  }
+  50% {
+    background-position: 200% center;
+  }
+}
+
+@keyframes iq-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+/* ===== Landing page ===== */
+
+@keyframes letter-fade {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-cta {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(177, 78, 255, 0.4); }
+  50% { box-shadow: 0 0 0 12px rgba(177, 78, 255, 0); }
+}
+
+@keyframes orb-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 15px) scale(0.95); }
+}
+
+@keyframes orb-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-25px, 25px) scale(0.95); }
+  66% { transform: translate(15px, -30px) scale(1.05); }
+}
+
+/* ===== Utility classes ===== */
+
+.animate-tube-shimmer { animation: tube-shimmer 2.5s ease-in-out infinite; }
+.animate-tube-shake { animation: tube-shake 0.4s ease-in-out; }
+.animate-tube-pop { animation: tube-pop 0.4s ease-out; }
+.animate-segment-pour-out { animation: segment-pour-out 0.25s ease-in forwards; }
+.animate-segment-pour-in { animation: segment-pour-in 0.25s ease-out forwards; }
+.animate-confetti-fall { animation: confetti-fall var(--dur, 2.5s) var(--delay, 0s) ease-out forwards; }
+.animate-modal-enter { animation: modal-enter 0.4s ease-out forwards; }
+.animate-star-pop { animation: star-pop 0.4s ease-out forwards; }
+.animate-float-up { animation: float-up 0.5s ease-out forwards; }
+.animate-float-up-fade { animation: float-up-fade 1s ease-out forwards; }
+.animate-shimmer-badge { animation: shimmer-badge 3s ease-in-out infinite; }
+.animate-iq-pulse { animation: iq-pulse 0.3s ease-in-out; }
+.animate-pulse-cta { animation: pulse-cta 2s ease-in-out infinite; }
+.animate-orb-1 { animation: orb-drift-1 20s ease-in-out infinite; }
+.animate-orb-2 { animation: orb-drift-2 25s ease-in-out infinite; }
