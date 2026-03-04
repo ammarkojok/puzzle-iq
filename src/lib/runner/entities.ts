@@ -23,7 +23,7 @@ export function createGate(
     z,
     color,
     collected: false,
-    width: 2.4,
-    height: 3.5,
+    width: 3.2,
+    height: 4.5,
   };
 }

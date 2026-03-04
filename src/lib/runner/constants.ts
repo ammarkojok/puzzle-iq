@@ -2,14 +2,14 @@
 
 // Lane configuration
 export const LANE_COUNT = 3;
-export const LANE_WIDTH = 1.8; // World units between lane centers
+export const LANE_WIDTH = 2.8; // World units between lane centers (wider for Subway Surfers feel)
 export const LANE_POSITIONS = [-LANE_WIDTH, 0, LANE_WIDTH]; // Left, Center, Right
 
-// Camera & perspective
-export const HORIZON_RATIO = 0.38; // 38% from top - slightly lower horizon for more road
-export const CAMERA_HEIGHT = 1.5;
-export const VIEW_DISTANCE = 280;
-export const ROAD_WIDTH = 6.0; // World units total road width
+// Camera & perspective (over-the-shoulder, looking from above/behind character)
+export const HORIZON_RATIO = 0.25; // 25% from top - high horizon, lots of road visible
+export const CAMERA_HEIGHT = 8.0; // High camera for top-down over-shoulder angle
+export const VIEW_DISTANCE = 200; // Perspective projection distance
+export const ROAD_WIDTH = 9.0; // Wide road fills most of screen width
 
 // Speed settings
 export const INITIAL_SPEED = 40; // Comfortable starting speed
@@ -22,7 +22,7 @@ export const SPEED_BOOST_DURATION = 1.5; // seconds
 export const LANE_SWITCH_DURATION = 0.15; // seconds to switch lanes
 
 // Gate spawning
-export const GATE_SPAWN_Z = 220; // Always spawn gates at this Z distance ahead
+export const GATE_SPAWN_Z = 180; // Spawn gates at this Z distance ahead
 
 // Tube settings
 export const TUBE_COUNT = 3;
@@ -43,10 +43,10 @@ export const DIFFICULTY_STAGES = [
 
 // Character
 export const CHARACTER_Y = 0; // Ground level
-export const CHARACTER_Z = 5; // Closer to camera for larger, more prominent character
+export const CHARACTER_Z = 5; // Distance from camera
 export const ANIM_FRAME_DURATION = 0.12; // seconds per frame
 
-// Collision - adjusted to match closer CHARACTER_Z
+// Collision
 export const GATE_COLLECT_Z_THRESHOLD = 3;
 
 // Particles

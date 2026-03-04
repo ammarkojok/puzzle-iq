@@ -41,8 +41,8 @@ export async function createCharacter3D(): Promise<Character3D> {
 
   // ── Camera - positioned behind and above character ─────────
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-  camera.position.set(0, 1.2, -3.5);
-  camera.lookAt(0, 0.9, 0);
+  camera.position.set(0, 2.2, -3.2);
+  camera.lookAt(0, 0.7, 0.5);
 
   // ── Lighting - neon cyberpunk rim lights ────────────────────
   // Key light (warm, from above-front)

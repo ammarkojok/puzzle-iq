@@ -404,7 +404,7 @@ function drawSideBuildings(
   // Building placement parameters
   const BUILDING_COUNT = 16; // buildings per side
   const BUILDING_SPACING = 18; // world-unit spacing along Z axis
-  const BUILDING_GAP = 0.6; // gap between road edge and building inner edge (world units)
+  const BUILDING_GAP = 0.2; // gap between road edge and building inner edge (world units)
 
   // Scroll offset: buildings repeat every (BUILDING_COUNT * BUILDING_SPACING)
   const totalCycleLength = BUILDING_COUNT * BUILDING_SPACING;
@@ -667,7 +667,7 @@ function drawLightPosts(ctx: CanvasRenderingContext2D, w: number, h: number, dis
   const horizon = h * HORIZON_RATIO;
   const roadHalf = ROAD_WIDTH / 2;
   const POST_SPACING = 24;
-  const POST_GAP = 0.3;
+  const POST_GAP = 0.15;
   const POST_HEIGHT = 4.0;
   const scrollOffset = distance % POST_SPACING;
 
