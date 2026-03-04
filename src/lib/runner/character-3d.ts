@@ -74,6 +74,7 @@ export async function createCharacter3D(): Promise<Character3D> {
   const animations = new Map<string, THREE.AnimationClip>();
   let mixer: THREE.AnimationMixer | null = null;
   let currentAction: THREE.AnimationAction | null = null;
+  let model: THREE.Group | null = null;
   let ready = false;
 
   // Animation file mapping
@@ -118,6 +119,7 @@ export async function createCharacter3D(): Promise<Character3D> {
     });
 
     scene.add(runFbx);
+    model = runFbx;
 
     // Setup animation mixer
     mixer = new THREE.AnimationMixer(runFbx);
@@ -159,6 +161,10 @@ export async function createCharacter3D(): Promise<Character3D> {
     update(dt: number) {
       if (!ready || !mixer) return;
       mixer.update(dt);
+      // Lock root position to prevent running animation vertical bobbing
+      if (model) {
+        model.position.y = 0;
+      }
       renderer.render(scene, camera);
     },
 

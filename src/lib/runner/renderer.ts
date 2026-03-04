@@ -15,6 +15,7 @@ import {
   VIEW_DISTANCE,
   CAMERA_HEIGHT,
   CHARACTER_Z,
+  CHARACTER_SCREEN_Y,
   MAX_PIXEL_RATIO,
 } from "./constants";
 import { projectToScreen } from "./perspective";
@@ -160,7 +161,8 @@ function drawRoad(
   w: number,
   h: number,
   distance: number,
-  speed: number
+  speed: number,
+  assets: GameAssets | null
 ) {
   const horizon = h * HORIZON_RATIO;
   const roadHalf = ROAD_WIDTH / 2;
@@ -222,12 +224,9 @@ function drawRoad(
 
     // Alternating road shading for depth
     const stripeIndex = Math.floor((distance + i * 4) / ROAD_STRIPE_LENGTH);
-    const isDark = stripeIndex % 2 === 0;
 
-    // Road surface: very dark with subtle variation
-    ctx.fillStyle = isDark
-      ? "rgba(12, 8, 28, 0.98)"
-      : "rgba(16, 12, 35, 0.98)";
+    // Road surface: dark base fill
+    ctx.fillStyle = "rgba(10, 6, 24, 0.98)";
     ctx.beginPath();
     ctx.moveTo(farLeftX, farY);
     ctx.lineTo(farRightX, farY);
@@ -235,6 +234,39 @@ function drawRoad(
     ctx.lineTo(nearLeftX, nearY);
     ctx.closePath();
     ctx.fill();
+
+    // Road texture overlay (if loaded)
+    if (assets?.roadTexture) {
+      const texImg = assets.roadTexture;
+      const segH = Math.abs(nearY - farY);
+      if (segH > 0.5) {
+        ctx.save();
+        // Clip to road trapezoid
+        ctx.beginPath();
+        ctx.moveTo(farLeftX, farY);
+        ctx.lineTo(farRightX, farY);
+        ctx.lineTo(nearRightX, nearY);
+        ctx.lineTo(nearLeftX, nearY);
+        ctx.closePath();
+        ctx.clip();
+
+        // Map texture: stretch to road width at near edge, scroll with distance
+        const nearRoadW = nearRightX - nearLeftX;
+        const texAspect = texImg.height / texImg.width;
+        const texDrawH = nearRoadW * texAspect;
+        // Scroll: tile vertically based on distance
+        const texScroll = (distance * 8) % texDrawH;
+        const drawX = nearLeftX;
+
+        // Draw tiled texture strips to cover the segment
+        ctx.globalAlpha = 0.35;
+        for (let ty = farY - texScroll - texDrawH; ty < nearY + texDrawH; ty += texDrawH) {
+          ctx.drawImage(texImg, drawX, ty, nearRoadW, texDrawH);
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
+    }
 
     // Edge glow intensity fades with distance
     const edgeAlpha = Math.min(0.7, 1.5 / (i * 0.25 + 1));
@@ -937,12 +969,12 @@ function drawCharacter(
   assets: GameAssets | null,
   char3dCanvas?: HTMLCanvasElement | null
 ) {
-  const screen = projectToScreen({ x: laneX, y: 0, z: CHARACTER_Z }, w, h);
+  // Fixed screen position: X from perspective (for lane), Y fixed at bottom
+  const x = w / 2 + laneX * (VIEW_DISTANCE / CHARACTER_Z);
+  const y = h * CHARACTER_SCREEN_Y;
 
   // Character size: large and prominent (like Subway Surfers ~20% of screen)
   const baseSize = h * 0.065;
-  const x = screen.x;
-  const y = screen.y;
 
   // Running bob animation (only for 2D fallback)
   const runPhase = animFrame * Math.PI * 0.5;
@@ -1231,7 +1263,7 @@ export function render(
   drawSky(ctx, w, h, assets, state.distance);
 
   // Road
-  drawRoad(ctx, w, h, state.distance, state.speed);
+  drawRoad(ctx, w, h, state.distance, state.speed, assets);
 
   // Side buildings: city corridor effect on both sides of the road
   drawSideBuildings(ctx, w, h, state.distance);

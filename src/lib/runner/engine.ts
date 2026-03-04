@@ -12,6 +12,7 @@ import {
   CHARACTER_Z,
   GATE_COLLECT_Z_THRESHOLD,
   ANIM_FRAME_DURATION,
+  VIEW_DISTANCE,
 } from "./constants";
 import { type Entity } from "./entities";
 import {
@@ -28,7 +29,6 @@ import {
   updateParticles as updateParticlesList,
 } from "./particles";
 import { render, type RenderState } from "./renderer";
-import { projectToScreen } from "./perspective";
 import { MAX_PIXEL_RATIO } from "./constants";
 
 // ── Game State ────────────────────────────────────────────────────
@@ -205,15 +205,12 @@ function checkCollisions(
       entity.color
     );
 
-    // Create particle burst at gate screen position
-    const screen = projectToScreen(
-      { x: LANE_POSITIONS[entity.lane], y: 0, z: CHARACTER_Z },
-      canvasW,
-      canvasH
-    );
+    // Create particle burst at character's fixed screen position
+    const screenX = canvasW / 2 + LANE_POSITIONS[entity.lane] * (VIEW_DISTANCE / CHARACTER_Z);
+    const screenY = canvasH * 0.85;
     const newParticles = [
       ...newState.particles,
-      ...createParticleBurst(screen.x, screen.y, entity.color, 8),
+      ...createParticleBurst(screenX, screenY, entity.color, 8),
     ];
 
     newState = {
@@ -263,8 +260,8 @@ function checkCollisions(
 
       // Extra particles for completion
       const completionParticles = createParticleBurst(
-        screen.x,
-        screen.y - 50,
+        screenX,
+        screenY - 50,
         entity.color,
         20
       );

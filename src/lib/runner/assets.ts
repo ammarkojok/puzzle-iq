@@ -6,6 +6,7 @@ export type GameAssets = {
   cityLayer: HTMLImageElement;
   character: HTMLImageElement;
   gateArch: HTMLImageElement;
+  roadTexture: HTMLImageElement;
   loaded: boolean;
 };
 
@@ -26,16 +27,18 @@ let cachedAssets: GameAssets | null = null;
 export async function loadGameAssets(): Promise<GameAssets> {
   if (cachedAssets?.loaded) return cachedAssets;
 
-  const [cityLayer, character, gateArch] = await Promise.all([
+  const [cityLayer, character, gateArch, roadTexture] = await Promise.all([
     loadImage("/assets/runner/bg-city-layer-1.png"),
     loadImage("/assets/runner/character-run-1.png"),
     loadImage("/assets/runner/gate-arch.png"),
+    loadImage("/assets/runner/road-texture.jpg"),
   ]);
 
   cachedAssets = {
     cityLayer,
     character,
     gateArch,
+    roadTexture,
     loaded: true,
   };
 
