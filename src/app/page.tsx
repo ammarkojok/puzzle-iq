@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { loadProgress } from "@/lib/progress";
-import { getPercentile, getMilestone } from "@/lib/scoring";
+import { formatIQ, getPercentile, getMilestone } from "@/lib/scoring";
 import type { PlayerProgress } from "@/lib/scoring";
 
 function useProgress() {
@@ -37,8 +37,8 @@ function AnimatedTitle() {
 export default function HomePage() {
   const { progress, ref } = useProgress();
 
-  const hasPlayed = progress !== null && progress.currentLevel > 1;
-  const milestone = progress ? getMilestone(progress.iq) : null;
+  const hasPlayed = progress !== null && progress.totalGamesPlayed > 0;
+  const milestone = progress ? getMilestone(progress.bestIq) : null;
 
   return (
     <div
@@ -48,11 +48,12 @@ export default function HomePage() {
       {/* Animated background orbs */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-purple-600/15 rounded-full blur-[120px] pointer-events-none animate-orb-1" />
       <div className="absolute bottom-1/4 left-1/3 w-[350px] h-[350px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none animate-orb-2" />
-      <div className="absolute top-1/2 right-1/4 w-[250px] h-[250px] bg-pink-600/8 rounded-full blur-[80px] pointer-events-none animate-orb-1" />
 
-      {/* Main content */}
       <div className="relative z-10 flex flex-col items-center text-center max-w-sm">
-        <div className="text-6xl mb-5 animate-[float-up_0.6s_ease-out_forwards]" style={{ opacity: 0, animationDelay: "100ms" }}>
+        <div
+          className="text-6xl mb-5 animate-[float-up_0.6s_ease-out_forwards]"
+          style={{ opacity: 0, animationDelay: "100ms" }}
+        >
           🧠
         </div>
 
@@ -62,29 +63,41 @@ export default function HomePage() {
           className="text-white/40 text-sm mt-3 mb-8 animate-[float-up_0.5s_ease-out_forwards]"
           style={{ opacity: 0, animationDelay: "600ms" }}
         >
-          Only 1% reach Genius level. How smart are you?
+          Endless color-sorting. How far can you go?
         </p>
 
-        {/* IQ display for returning players */}
+        {/* Best run stats for returning players */}
         {hasPlayed && progress && (
-          <div className="mb-8 animate-[float-up_0.5s_ease-out_forwards]" style={{ opacity: 0, animationDelay: "700ms" }}>
+          <div
+            className="mb-8 animate-[float-up_0.5s_ease-out_forwards]"
+            style={{ opacity: 0, animationDelay: "700ms" }}
+          >
             <div className="bg-white/[0.04] border border-white/10 rounded-2xl px-8 py-6 backdrop-blur-sm">
               <p className="text-white/30 text-xs uppercase tracking-widest mb-1">
-                Your Puzzle IQ
+                Best Run
               </p>
-              <p className="text-5xl font-extrabold tabular-nums">{progress.iq}</p>
-              <p className="text-purple-400 text-sm mt-1">
-                Top {getPercentile(progress.iq)}% of players
+              <div className="flex items-center gap-6 mt-2">
+                <div className="text-center">
+                  <p className="text-3xl font-extrabold text-purple-400 tabular-nums">
+                    {formatIQ(progress.bestIq)}
+                  </p>
+                  <p className="text-white/40 text-xs">IQ</p>
+                </div>
+                <div className="w-px h-10 bg-white/10" />
+                <div className="text-center">
+                  <p className="text-3xl font-extrabold tabular-nums">
+                    {progress.bestTubesCompleted}
+                  </p>
+                  <p className="text-white/40 text-xs">Tubes</p>
+                </div>
+              </div>
+              <p className="text-purple-400/70 text-xs mt-2">
+                Top {getPercentile(progress.bestIq)}% of players
               </p>
               {milestone && (
                 <span className="inline-block mt-2 rounded-full bg-purple-500/15 px-3 py-0.5 text-xs font-semibold text-purple-400">
                   {milestone}
                 </span>
-              )}
-              {progress.bestStreak > 1 && (
-                <p className="text-orange-400/70 text-xs mt-1">
-                  🔥 Best streak: {progress.bestStreak}
-                </p>
               )}
             </div>
           </div>
@@ -94,9 +107,8 @@ export default function HomePage() {
         <a
           href="/play"
           className="group relative inline-flex items-center justify-center w-full max-w-[280px] py-4 px-8 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 rounded-2xl font-bold text-lg transition-all duration-200 active:scale-95 animate-pulse-cta"
-          style={{ animationDelay: "800ms" }}
         >
-          {hasPlayed ? `Continue — Level ${progress?.currentLevel}` : "Test Your IQ"}
+          {hasPlayed ? "Play Again" : "Start Playing"}
           <svg
             className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform"
             fill="none"
@@ -116,24 +128,14 @@ export default function HomePage() {
           📅 Daily Challenge
         </a>
 
-        {/* Secondary actions */}
-        {hasPlayed && (
-          <a
-            href="/play?level=1"
-            className="mt-3 text-white/25 hover:text-white/40 text-sm transition-colors"
-          >
-            Start from Level 1
-          </a>
-        )}
-
-        {/* Social proof stats */}
+        {/* Social proof */}
         <div
           className="mt-14 flex items-center gap-6 text-white/25 text-xs animate-[float-up_0.5s_ease-out_forwards]"
           style={{ opacity: 0, animationDelay: "1000ms" }}
         >
           <div className="flex flex-col items-center">
-            <span className="text-white/50 font-semibold text-base">50+</span>
-            <span>Levels</span>
+            <span className="text-white/50 font-semibold text-base">∞</span>
+            <span>Endless</span>
           </div>
           <div className="w-px h-8 bg-white/10" />
           <div className="flex flex-col items-center">

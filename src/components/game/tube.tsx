@@ -1,147 +1,169 @@
 "use client";
 
-import { TUBE_CAPACITY, type Color } from "@/lib/game-engine";
+import { TUBE_CAPACITY, type Color, type TubeStatus } from "@/lib/game-engine";
 import { getColorHex, getColorGlow } from "@/lib/colors";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 interface TubeProps {
   colors: Color[];
+  status: TubeStatus;
   isSelected: boolean;
   isComplete: boolean;
   onClick: () => void;
-  animatingPour?: "in" | "out" | null;
   isHintSource?: boolean;
   isHintTarget?: boolean;
   justCompleted?: boolean;
+  exiting?: boolean;
+  entering?: boolean;
 }
 
 export function Tube({
   colors,
+  status,
   isSelected,
   isComplete,
   onClick,
-  animatingPour,
   isHintSource,
   isHintTarget,
   justCompleted,
+  exiting,
+  entering,
 }: TubeProps) {
   const slots: (Color | null)[] = [];
   for (let i = 0; i < TUBE_CAPACITY; i++) {
     slots.push(i < colors.length ? colors[i] : null);
   }
 
+  const isLocked = status === "locked";
+  const isDisabled = isLocked;
+
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={isDisabled ? undefined : onClick}
+      disabled={isDisabled}
       aria-label={
-        colors.length === 0
-          ? "Empty tube"
-          : `Tube with ${colors.join(", ")} from bottom to top`
+        isLocked
+          ? "Locked tube"
+          : colors.length === 0
+            ? "Empty tube"
+            : `Tube with ${colors.join(", ")}`
       }
       className={cn(
-        "relative flex flex-col-reverse items-center outline-none",
-        "transition-transform duration-200 ease-out",
-        isSelected && "-translate-y-4",
-        justCompleted && "animate-[tube-pop_400ms_ease-out]",
+        "relative flex flex-col items-center outline-none",
+        "transition-all duration-300 ease-out",
+        isSelected && "-translate-y-5",
+        justCompleted && "animate-[tube-pop_500ms_ease-out]",
         isHintSource && "animate-[hint-pulse_1s_ease-in-out_infinite]",
         isHintTarget && "animate-[hint-pulse_1s_ease-in-out_infinite_200ms]",
+        isLocked && "opacity-40 blur-[2px] cursor-not-allowed",
+        exiting && "animate-[tube-exit_500ms_ease-in_forwards]",
+        entering && "animate-[tube-enter_400ms_ease-out_forwards]",
       )}
     >
+      {/* Selection glow */}
       {isSelected && (
         <div
           aria-hidden="true"
-          className="absolute -bottom-2 left-1/2 h-4 w-12 -translate-x-1/2 rounded-full bg-purple-500/40 blur-lg"
+          className="absolute -bottom-3 left-1/2 h-5 w-14 -translate-x-1/2 rounded-full bg-purple-500/50 blur-xl"
         />
       )}
 
-      {isComplete && (
-        <div
-          aria-hidden="true"
-          className="absolute -top-2 left-1/2 z-10 h-2.5 w-[calc(100%-6px)] -translate-x-1/2 rounded-t-full"
-          style={{
-            background: colors[0]
-              ? `linear-gradient(180deg, ${getColorHex(colors[0])}88 0%, ${getColorHex(colors[0])}44 100%)`
-              : undefined,
-          }}
-        />
-      )}
-
+      {/* Completion glow ring */}
       {justCompleted && (
         <div
           aria-hidden="true"
-          className="absolute inset-0 z-20 animate-[glow-ring_600ms_ease-out_forwards] rounded-2xl"
+          className="absolute inset-0 z-30 animate-[glow-ring_600ms_ease-out_forwards] rounded-3xl"
           style={{
             boxShadow: colors[0]
-              ? `0 0 30px ${getColorGlow(colors[0])}, 0 0 60px ${getColorGlow(colors[0])}`
+              ? `0 0 40px ${getColorGlow(colors[0])}, 0 0 80px ${getColorGlow(colors[0])}`
               : undefined,
           }}
         />
       )}
 
-      <div
-        className={cn(
-          "relative flex w-[56px] sm:w-[62px] flex-col-reverse overflow-hidden",
-          "rounded-b-2xl rounded-t-lg",
-          "border border-white/15 shadow-inner",
-          "bg-gradient-to-b from-white/[0.07] to-white/[0.02]",
-          "h-[156px] sm:h-[168px] p-[3px] pt-0",
-          isComplete && "animate-[tube-shimmer_2.5s_ease-in-out_infinite]",
-          isSelected && "border-purple-400/40",
-        )}
-      >
-        {slots.map((color, slotIndex) => {
-          const isTopSegment = slotIndex === colors.length - 1 && color !== null;
-          const isPouringOut = isTopSegment && animatingPour === "out";
-          const isPouringIn = isTopSegment && animatingPour === "in";
-          const hex = color ? getColorHex(color) : undefined;
+      {/* Lock icon */}
+      {isLocked && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center">
+          <span className="text-2xl opacity-60">🔒</span>
+        </div>
+      )}
 
-          return (
-            <div
-              key={slotIndex}
-              className={cn(
-                "relative h-[36px] sm:h-[39px] w-full transition-all duration-200",
-                slotIndex === 0 && "rounded-b-xl",
-                isTopSegment && "rounded-t-md",
-                isPouringOut && "animate-[segment-pour-out_250ms_ease-in_forwards]",
-                isPouringIn && "animate-[segment-pour-in_250ms_ease-out_forwards]",
-              )}
-              style={
-                hex
-                  ? {
-                      background: `linear-gradient(180deg, ${hex}ff 0%, ${hex}ee 40%, ${hex}dd 70%, ${hex}bb 100%)`,
-                    }
-                  : undefined
-              }
-            >
-              {color && (
-                <>
-                  <div
-                    className="absolute inset-x-0 top-0 h-[40%] rounded-t-[inherit]"
-                    style={{
-                      background: "linear-gradient(180deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.05) 100%)",
-                    }}
-                  />
-                  <div
-                    className="absolute bottom-0 inset-x-0 h-[30%]"
-                    style={{
-                      background: "linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.15) 100%)",
-                    }}
-                  />
-                  {isTopSegment && (
+      {/* Tube container */}
+      <div className="relative w-[52px] sm:w-[58px] h-[160px] sm:h-[176px]">
+        {/* Color segments (behind glass) */}
+        <div className="absolute bottom-[8px] left-[5px] right-[5px] top-[12px] flex flex-col-reverse overflow-hidden rounded-b-[18px] rounded-t-[4px]">
+          {slots.map((color, slotIndex) => {
+            const isTopSegment = slotIndex === colors.length - 1 && color !== null;
+            const hex = color ? getColorHex(color) : undefined;
+
+            return (
+              <div
+                key={slotIndex}
+                className={cn(
+                  "relative w-full transition-all duration-300",
+                  color ? "h-[34px] sm:h-[37px]" : "h-[34px] sm:h-[37px]",
+                  slotIndex === 0 && "rounded-b-[14px]",
+                )}
+                style={
+                  hex
+                    ? {
+                        background: `linear-gradient(180deg, ${hex}ff 0%, ${hex}ee 35%, ${hex}dd 65%, ${hex}cc 100%)`,
+                      }
+                    : undefined
+                }
+              >
+                {color && (
+                  <>
+                    {/* Glossy highlight */}
                     <div
-                      className="absolute -top-[2px] inset-x-[2px] h-[6px] rounded-full"
+                      className="absolute inset-x-0 top-0 h-[45%] rounded-t-[inherit]"
                       style={{
-                        background: `radial-gradient(ellipse at center, ${hex}ff 0%, ${hex}88 60%, transparent 100%)`,
-                        filter: "blur(1px)",
+                        background: "linear-gradient(180deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.05) 100%)",
                       }}
                     />
-                  )}
-                </>
-              )}
-            </div>
-          );
-        })}
+                    {/* Bottom shadow */}
+                    <div
+                      className="absolute bottom-0 inset-x-0 h-[25%]"
+                      style={{
+                        background: "linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.2) 100%)",
+                      }}
+                    />
+                    {/* Meniscus on top segment */}
+                    {isTopSegment && (
+                      <div
+                        className="absolute -top-[3px] inset-x-[3px] h-[8px] rounded-[50%]"
+                        style={{
+                          background: `radial-gradient(ellipse at 50% 70%, ${hex}ff 0%, ${hex}99 50%, transparent 100%)`,
+                          filter: "blur(1.5px)",
+                        }}
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Glass tube overlay */}
+        <Image
+          src="/tube-glass.png"
+          alt=""
+          width={58}
+          height={176}
+          className="absolute inset-0 w-full h-full object-contain pointer-events-none z-10"
+          aria-hidden="true"
+          priority
+        />
+
+        {/* Complete shimmer overlay */}
+        {isComplete && (
+          <div
+            className="absolute inset-0 z-20 rounded-3xl animate-[tube-shimmer_2s_ease-in-out_infinite] pointer-events-none"
+          />
+        )}
       </div>
     </button>
   );

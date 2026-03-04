@@ -1,14 +1,11 @@
 import type { PlayerProgress } from "@/lib/scoring";
 
-const STORAGE_KEY = "puzzle-iq-progress";
+const STORAGE_KEY = "puzzle-iq-progress-v2";
 
 const DEFAULT_PROGRESS: PlayerProgress = {
-  iq: 100,
-  currentLevel: 1,
-  streak: 0,
-  completedLevels: [],
-  totalMoves: 0,
-  bestStreak: 0,
+  bestIq: 100,
+  bestTubesCompleted: 0,
+  totalGamesPlayed: 0,
   dailyStreak: 0,
   lastDailyDate: null,
   tutorialSeen: false,
@@ -37,12 +34,20 @@ export function saveProgress(progress: PlayerProgress): void {
   }
 }
 
-export function resetProgress(): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    /* silently ignore */
+export function updateBestRun(currentIq: number, tubesCompleted: number): void {
+  const p = loadProgress();
+  let changed = false;
+  if (currentIq > p.bestIq) {
+    p.bestIq = Math.round(currentIq * 10) / 10;
+    changed = true;
+  }
+  if (tubesCompleted > p.bestTubesCompleted) {
+    p.bestTubesCompleted = tubesCompleted;
+    changed = true;
+  }
+  p.totalGamesPlayed++;
+  if (changed || true) {
+    saveProgress(p);
   }
 }
 
@@ -50,11 +55,8 @@ function isPlayerProgress(value: unknown): value is PlayerProgress {
   if (typeof value !== "object" || value === null) return false;
   const obj = value as Record<string, unknown>;
   return (
-    typeof obj.iq === "number" &&
-    typeof obj.currentLevel === "number" &&
-    typeof obj.streak === "number" &&
-    Array.isArray(obj.completedLevels) &&
-    typeof obj.totalMoves === "number" &&
-    typeof obj.bestStreak === "number"
+    typeof obj.bestIq === "number" &&
+    typeof obj.bestTubesCompleted === "number" &&
+    typeof obj.totalGamesPlayed === "number"
   );
 }

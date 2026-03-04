@@ -1,41 +1,5 @@
 import { GAME_COLORS } from "@/lib/colors";
-import {
-  TUBE_CAPACITY,
-  isTubeComplete,
-  type Tube,
-} from "@/lib/game-engine";
-
-export type LevelConfig = {
-  numColors: number;
-  extraTubes: number;
-};
-
-/**
- * Difficulty ramps up fast. 1 empty tube = significantly harder.
- *
- *   1-3  : 3 colors, 2 empty (tutorial)
- *   4-6  : 4 colors, 2 empty
- *   7-10 : 5 colors, 2 empty
- *  11-15 : 5 colors, 1 empty (hard)
- *  16-20 : 6 colors, 2 empty
- *  21-30 : 6 colors, 1 empty (very hard)
- *  31-40 : 7 colors, 2 empty
- *  41-50 : 7 colors, 1 empty (expert)
- *  51-70 : 8 colors, 2 empty
- *  71+   : 8 colors, 1 empty (genius)
- */
-export function getLevelConfig(level: number): LevelConfig {
-  if (level <= 3) return { numColors: 3, extraTubes: 2 };
-  if (level <= 6) return { numColors: 4, extraTubes: 2 };
-  if (level <= 10) return { numColors: 5, extraTubes: 2 };
-  if (level <= 15) return { numColors: 5, extraTubes: 1 };
-  if (level <= 20) return { numColors: 6, extraTubes: 2 };
-  if (level <= 30) return { numColors: 6, extraTubes: 1 };
-  if (level <= 40) return { numColors: 7, extraTubes: 2 };
-  if (level <= 50) return { numColors: 7, extraTubes: 1 };
-  if (level <= 70) return { numColors: 8, extraTubes: 2 };
-  return { numColors: 8, extraTubes: 1 };
-}
+import { TUBE_CAPACITY, isTubeComplete, type Tube } from "@/lib/game-engine";
 
 type Rng = () => number;
 
@@ -49,9 +13,6 @@ function createRng(seed: number): Rng {
   };
 }
 
-/**
- * Fisher-Yates shuffle on an array in-place using a seeded RNG.
- */
 function shuffle<T>(arr: T[], rng: Rng): void {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
@@ -59,18 +20,23 @@ function shuffle<T>(arr: T[], rng: Rng): void {
   }
 }
 
+/** How many unique colors to use based on tubes completed so far. */
+export function getColorCount(tubesCompleted: number): number {
+  if (tubesCompleted < 5) return 4;
+  if (tubesCompleted < 15) return 5;
+  if (tubesCompleted < 30) return 6;
+  if (tubesCompleted < 50) return 7;
+  return 8;
+}
+
 /**
- * Generate a level by creating a pool of all color segments, shuffling
- * them fully, and dealing into tubes. This guarantees every tube is
- * thoroughly mixed — no tube starts already solved.
- *
- * Solvability: with at least 1 empty workspace tube, randomly distributed
- * color-sort puzzles are solvable in practice. As a safety net, we reject
- * and reshuffle any layout where a tube is already complete.
+ * Generate a batch of well-mixed tubes for the start of the game.
+ * Creates numColors worth of tube segments, shuffles them thoroughly,
+ * and deals them into tubes. No tube will start already complete.
  */
-export function generateLevel(config: LevelConfig, seed?: number): Tube[] {
-  const rng = createRng(seed ?? config.numColors * 7919 + 42);
-  const colorIds = GAME_COLORS.slice(0, config.numColors).map((c) => c.id);
+export function generateInitialTubes(numColors: number, seed: number): Tube[] {
+  const rng = createRng(seed);
+  const colorIds = GAME_COLORS.slice(0, numColors).map((c) => c.id);
 
   let tubes: Tube[];
   let tries = 0;
@@ -82,29 +48,55 @@ export function generateLevel(config: LevelConfig, seed?: number): Tube[] {
         pool.push(color);
       }
     }
-
     shuffle(pool, rng);
 
     tubes = [];
-    for (let i = 0; i < config.numColors; i++) {
+    for (let i = 0; i < numColors; i++) {
       tubes.push(pool.slice(i * TUBE_CAPACITY, (i + 1) * TUBE_CAPACITY));
     }
-
     tries++;
   } while (tries < 50 && tubes.some((t) => isTubeComplete(t)));
-
-  for (let i = 0; i < config.extraTubes; i++) {
-    tubes.push([]);
-  }
 
   return tubes;
 }
 
+/**
+ * Generate a single new mixed tube to add to the queue.
+ * The tube contains TUBE_CAPACITY segments drawn from the available colors,
+ * ensuring it's not already a single color.
+ */
+export function generateSingleTube(numColors: number, seed: number): Tube {
+  const rng = createRng(seed);
+  const colorIds = GAME_COLORS.slice(0, numColors).map((c) => c.id);
+
+  let tube: Tube;
+  let tries = 0;
+
+  do {
+    tube = [];
+    for (let i = 0; i < TUBE_CAPACITY; i++) {
+      tube.push(colorIds[Math.floor(rng() * colorIds.length)]);
+    }
+    tries++;
+  } while (tries < 30 && tube.every((c) => c === tube[0]));
+
+  return tube;
+}
+
+/** Generate a batch of queue tubes for the endless mode. */
+export function generateTubeQueue(count: number, numColors: number, baseSeed: number): Tube[] {
+  const tubes: Tube[] = [];
+  for (let i = 0; i < count; i++) {
+    tubes.push(generateSingleTube(numColors, baseSeed + i * 7919));
+  }
+  return tubes;
+}
+
+/** Generate a daily challenge puzzle seeded by date string. */
 export function generateDailyLevel(dateStr: string): Tube[] {
   let hash = 0;
   for (let i = 0; i < dateStr.length; i++) {
     hash = (hash * 31 + dateStr.charCodeAt(i)) | 0;
   }
-  const config: LevelConfig = { numColors: 7, extraTubes: 1 };
-  return generateLevel(config, Math.abs(hash));
+  return generateInitialTubes(7, Math.abs(hash));
 }

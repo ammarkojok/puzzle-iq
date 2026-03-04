@@ -1,5 +1,6 @@
 "use client";
 
+import { formatIQ } from "@/lib/scoring";
 import { cn } from "@/lib/utils";
 
 interface IqBadgeProps {
@@ -21,7 +22,7 @@ export function IqBadge({ iq, percentile, animated }: IqBadgeProps) {
         <span className="mr-1 text-base" aria-hidden="true">
           🧠
         </span>
-        {iq}
+        {formatIQ(iq)}
       </span>
       <span className="text-[10px] text-white/50">
         Top {percentile}%

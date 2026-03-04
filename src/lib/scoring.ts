@@ -1,49 +1,54 @@
-export type LevelResult = {
-  level: number;
-  moves: number;
-  optimalMoves: number;
-  timeSeconds: number;
+export type TubeResult = {
+  movesSinceLastTube: number;
+  secondsSinceLastTube: number;
   usedUndo: boolean;
   usedHint: boolean;
 };
 
 export type PlayerProgress = {
-  iq: number;
-  currentLevel: number;
-  streak: number;
-  completedLevels: number[];
-  totalMoves: number;
-  bestStreak: number;
+  bestIq: number;
+  bestTubesCompleted: number;
+  totalGamesPlayed: number;
   dailyStreak: number;
   lastDailyDate: string | null;
   tutorialSeen: boolean;
   soundEnabled: boolean;
 };
 
-const EFFICIENCY_RATIO = 1.5;
-const SPEED_THRESHOLD_SECONDS = 15;
+/**
+ * Calculate IQ gain for completing a single tube.
+ * Returns a fractional value (0.3 to 1.0).
+ *
+ *   Base:        +0.3
+ *   Efficient:   +0.2 (completed in <= 6 moves since last tube)
+ *   Fast:        +0.2 (completed within 10 seconds)
+ *   Clean:       +0.3 (no undo or hint used during this tube)
+ *   ---
+ *   Maximum:      1.0 per tube
+ */
+export function calculateTubeIQGain(result: TubeResult): number {
+  let points = 0.3;
 
-export function calculateIQGain(result: LevelResult): number {
-  let points = 2;
-  if (result.optimalMoves > 0 && result.moves <= result.optimalMoves * EFFICIENCY_RATIO) {
-    points += 1;
+  if (result.movesSinceLastTube <= 6) {
+    points += 0.2;
   }
-  if (result.timeSeconds < SPEED_THRESHOLD_SECONDS) {
-    points += 1;
+
+  if (result.secondsSinceLastTube <= 10) {
+    points += 0.2;
   }
+
   if (!result.usedUndo && !result.usedHint) {
-    points += 1;
+    points += 0.3;
   }
-  return points;
+
+  return Math.round(points * 10) / 10;
 }
 
 const PERCENTILE_BRACKETS: { minIQ: number; percentile: number }[] = [
-  { minIQ: 141, percentile: 1 },
-  { minIQ: 131, percentile: 3 },
-  { minIQ: 121, percentile: 8 },
-  { minIQ: 116, percentile: 15 },
-  { minIQ: 111, percentile: 25 },
-  { minIQ: 106, percentile: 35 },
+  { minIQ: 140, percentile: 1 },
+  { minIQ: 130, percentile: 3 },
+  { minIQ: 120, percentile: 8 },
+  { minIQ: 110, percentile: 25 },
   { minIQ: 100, percentile: 50 },
 ];
 
@@ -67,4 +72,9 @@ export function getMilestone(iq: number): string | null {
     if (iq >= milestone.minIQ) return milestone.label;
   }
   return null;
+}
+
+/** Format IQ with one decimal place. */
+export function formatIQ(iq: number): string {
+  return iq.toFixed(1);
 }

@@ -24,15 +24,10 @@
   }
 }
 
-/* ===== Tube animations ===== */
-
+/* Tube animations */
 @keyframes tube-shimmer {
-  0%, 100% {
-    box-shadow: 0 0 8px rgba(46, 213, 115, 0.3), inset 0 0 6px rgba(46, 213, 115, 0.1);
-  }
-  50% {
-    box-shadow: 0 0 24px rgba(46, 213, 115, 0.5), inset 0 0 12px rgba(46, 213, 115, 0.2);
-  }
+  0%, 100% { box-shadow: 0 0 8px rgba(46, 213, 115, 0.3), inset 0 0 6px rgba(46, 213, 115, 0.1); }
+  50% { box-shadow: 0 0 24px rgba(46, 213, 115, 0.5), inset 0 0 12px rgba(46, 213, 115, 0.2); }
 }
 
 @keyframes tube-shake {
@@ -45,9 +40,19 @@
 
 @keyframes tube-pop {
   0% { transform: scale(1); }
-  40% { transform: scale(1.12); }
-  70% { transform: scale(0.95); }
+  30% { transform: scale(1.15); }
+  60% { transform: scale(0.93); }
   100% { transform: scale(1); }
+}
+
+@keyframes tube-exit {
+  0% { opacity: 1; transform: scale(1) translateY(0); }
+  100% { opacity: 0; transform: scale(0.5) translateY(-40px); }
+}
+
+@keyframes tube-enter {
+  0% { opacity: 0; transform: scale(0.5) translateY(30px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 @keyframes segment-pour-out {
@@ -62,41 +67,25 @@
 
 @keyframes glow-ring {
   0% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1.4); }
+  100% { opacity: 0; transform: scale(1.5); }
 }
 
 @keyframes hint-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(177, 78, 255, 0); transform: scale(1); }
-  50% { box-shadow: 0 0 20px 4px rgba(177, 78, 255, 0.4); transform: scale(1.03); }
+  50% { box-shadow: 0 0 20px 4px rgba(177, 78, 255, 0.4); transform: scale(1.04); }
 }
 
-/* ===== Confetti ===== */
-
+/* Confetti */
 @keyframes confetti-fall {
-  0% {
-    transform: translateY(-10px) translateX(0) rotate(0deg);
-    opacity: 1;
-  }
-  80% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(100vh) translateX(var(--drift, 0px)) rotate(720deg);
-    opacity: 0;
-  }
+  0% { transform: translateY(-10px) translateX(0) rotate(0deg); opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translateY(100vh) translateX(var(--drift, 0px)) rotate(720deg); opacity: 0; }
 }
 
-/* ===== Modal ===== */
-
+/* Modal */
 @keyframes modal-enter {
-  0% {
-    opacity: 0;
-    transform: scale(0.9) translateY(20px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
+  0% { opacity: 0; transform: scale(0.9) translateY(20px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 @keyframes star-pop {
@@ -116,12 +105,8 @@
 }
 
 @keyframes shimmer-badge {
-  0%, 100% {
-    background-position: -100% center;
-  }
-  50% {
-    background-position: 200% center;
-  }
+  0%, 100% { background-position: -100% center; }
+  50% { background-position: 200% center; }
 }
 
 @keyframes iq-pulse {
@@ -129,8 +114,7 @@
   50% { transform: scale(1.06); }
 }
 
-/* ===== Landing page ===== */
-
+/* Landing page */
 @keyframes letter-fade {
   0% { opacity: 0; transform: translateY(10px); }
   100% { opacity: 1; transform: translateY(0); }
@@ -153,20 +137,7 @@
   66% { transform: translate(15px, -30px) scale(1.05); }
 }
 
-/* ===== Utility classes ===== */
-
-.animate-tube-shimmer { animation: tube-shimmer 2.5s ease-in-out infinite; }
-.animate-tube-shake { animation: tube-shake 0.4s ease-in-out; }
-.animate-tube-pop { animation: tube-pop 0.4s ease-out; }
-.animate-segment-pour-out { animation: segment-pour-out 0.25s ease-in forwards; }
-.animate-segment-pour-in { animation: segment-pour-in 0.25s ease-out forwards; }
-.animate-confetti-fall { animation: confetti-fall var(--dur, 2.5s) var(--delay, 0s) ease-out forwards; }
-.animate-modal-enter { animation: modal-enter 0.4s ease-out forwards; }
-.animate-star-pop { animation: star-pop 0.4s ease-out forwards; }
-.animate-float-up { animation: float-up 0.5s ease-out forwards; }
-.animate-float-up-fade { animation: float-up-fade 1s ease-out forwards; }
-.animate-shimmer-badge { animation: shimmer-badge 3s ease-in-out infinite; }
-.animate-iq-pulse { animation: iq-pulse 0.3s ease-in-out; }
-.animate-pulse-cta { animation: pulse-cta 2s ease-in-out infinite; }
+/* Utility classes */
 .animate-orb-1 { animation: orb-drift-1 20s ease-in-out infinite; }
 .animate-orb-2 { animation: orb-drift-2 25s ease-in-out infinite; }
+.animate-pulse-cta { animation: pulse-cta 2s ease-in-out infinite; }

@@ -3,14 +3,25 @@ export const TUBE_CAPACITY = 4;
 export type Color = string;
 export type Tube = Color[];
 
+export type TubeStatus = "active" | "locked" | "empty" | "completing";
+
+export type TubeSlot = {
+  tube: Tube;
+  status: TubeStatus;
+  id: number;
+};
+
 export type GameState = {
-  tubes: Tube[];
+  slots: TubeSlot[];
   moves: number;
-  undoStack: Tube[][];
-  isComplete: boolean;
+  undoStack: TubeSlot[][];
   startTime: number;
-  completedTubes: boolean[];
-  justCompleted: number | null;
+  tubesCompleted: number;
+  iq: number;
+  /** Index of tube that just became complete (for burst animation). -1 if none. */
+  justCompletedId: number;
+  gameOver: boolean;
+  nextId: number;
 };
 
 export function getTopColor(tube: Tube): Color | null {
@@ -33,36 +44,43 @@ export function isTubeComplete(tube: Tube): boolean {
   return tube.every((c) => c === tube[0]);
 }
 
-export function getCompletedTubes(tubes: Tube[]): boolean[] {
-  return tubes.map(isTubeComplete);
-}
+export function createInitialState(filledTubes: Tube[], emptyCount: number, lockedTubes: Tube[]): GameState {
+  let nextId = 0;
+  const slots: TubeSlot[] = [];
 
-export function checkComplete(tubes: Tube[]): boolean {
-  return tubes.every((tube) => tube.length === 0 || isTubeComplete(tube));
-}
+  for (const t of filledTubes) {
+    slots.push({ tube: [...t], status: "active", id: nextId++ });
+  }
+  for (let i = 0; i < emptyCount; i++) {
+    slots.push({ tube: [], status: "empty", id: nextId++ });
+  }
+  for (const t of lockedTubes) {
+    slots.push({ tube: [...t], status: "locked", id: nextId++ });
+  }
 
-export function createGameState(tubes: Tube[]): GameState {
-  const clonedTubes = tubes.map((t) => [...t]);
   return {
-    tubes: clonedTubes,
+    slots,
     moves: 0,
     undoStack: [],
-    isComplete: checkComplete(clonedTubes),
     startTime: Date.now(),
-    completedTubes: getCompletedTubes(clonedTubes),
-    justCompleted: null,
+    tubesCompleted: 0,
+    iq: 100,
+    justCompletedId: -1,
+    gameOver: false,
+    nextId,
   };
 }
 
-export function canPour(
-  state: GameState,
-  fromIndex: number,
-  toIndex: number,
-): boolean {
+export function canPour(state: GameState, fromIndex: number, toIndex: number): boolean {
   if (fromIndex === toIndex) return false;
-  const from = state.tubes[fromIndex];
-  const to = state.tubes[toIndex];
-  if (!from || !to) return false;
+  const fromSlot = state.slots[fromIndex];
+  const toSlot = state.slots[toIndex];
+  if (!fromSlot || !toSlot) return false;
+  if (fromSlot.status === "locked" || toSlot.status === "locked") return false;
+  if (fromSlot.status === "completing") return false;
+
+  const from = fromSlot.tube;
+  const to = toSlot.tube;
   if (from.length === 0) return false;
   if (isTubeComplete(from)) return false;
   if (to.length >= TUBE_CAPACITY) return false;
@@ -70,24 +88,22 @@ export function canPour(
   const toTopColor = getTopColor(to);
   if (toTopColor !== null && toTopColor !== getTopColor(from)) return false;
 
+  // Don't pour uniform tube into empty (pointless)
   if (to.length === 0 && from.every((c) => c === from[0])) return false;
 
   return true;
 }
 
-export function pour(
-  state: GameState,
-  fromIndex: number,
-  toIndex: number,
-): GameState {
+export function pour(state: GameState, fromIndex: number, toIndex: number): GameState {
   if (!canPour(state, fromIndex, toIndex)) {
-    throw new Error(`Invalid pour from tube ${fromIndex} to tube ${toIndex}`);
+    throw new Error(`Invalid pour from ${fromIndex} to ${toIndex}`);
   }
 
-  const previousTubes = state.tubes.map((t) => [...t]);
-  const newTubes = state.tubes.map((t) => [...t]);
-  const from = newTubes[fromIndex];
-  const to = newTubes[toIndex];
+  const prevSlots = state.slots.map((s) => ({ ...s, tube: [...s.tube] }));
+  const newSlots = state.slots.map((s) => ({ ...s, tube: [...s.tube] }));
+
+  const from = newSlots[fromIndex].tube;
+  const to = newSlots[toIndex].tube;
 
   const topCount = getTopCount(from);
   const availableSpace = TUBE_CAPACITY - to.length;
@@ -97,46 +113,86 @@ export function pour(
     to.push(from.pop()!);
   }
 
-  const prevCompleted = getCompletedTubes(previousTubes);
-  const newCompleted = getCompletedTubes(newTubes);
-
-  let justCompleted: number | null = null;
-  for (let i = 0; i < newCompleted.length; i++) {
-    if (newCompleted[i] && !prevCompleted[i]) {
-      justCompleted = i;
-      break;
-    }
+  // Check if destination just became complete
+  let justCompletedId = -1;
+  if (isTubeComplete(to)) {
+    justCompletedId = newSlots[toIndex].id;
   }
 
   return {
-    tubes: newTubes,
+    ...state,
+    slots: newSlots,
     moves: state.moves + 1,
-    undoStack: [...state.undoStack, previousTubes],
-    isComplete: checkComplete(newTubes),
-    startTime: state.startTime,
-    completedTubes: newCompleted,
-    justCompleted,
+    undoStack: [...state.undoStack, prevSlots],
+    justCompletedId,
   };
 }
 
 export function undo(state: GameState): GameState {
   if (state.undoStack.length === 0) return state;
   const newStack = [...state.undoStack];
-  const previousTubes = newStack.pop()!;
+  const prevSlots = newStack.pop()!;
   return {
-    tubes: previousTubes,
+    ...state,
+    slots: prevSlots,
     moves: state.moves,
     undoStack: newStack,
-    isComplete: checkComplete(previousTubes),
-    startTime: state.startTime,
-    completedTubes: getCompletedTubes(previousTubes),
-    justCompleted: null,
+    justCompletedId: -1,
   };
 }
 
+/** Remove completed tube at index and insert a new tube from the queue. */
+export function replaceTube(state: GameState, completedIndex: number, newTube: Tube | null): GameState {
+  const newSlots = state.slots.map((s) => ({ ...s, tube: [...s.tube] }));
+
+  if (newTube) {
+    newSlots[completedIndex] = {
+      tube: [...newTube],
+      status: "active",
+      id: state.nextId,
+    };
+  } else {
+    // Make it empty workspace
+    newSlots[completedIndex] = {
+      tube: [],
+      status: "empty",
+      id: state.nextId,
+    };
+  }
+
+  return {
+    ...state,
+    slots: newSlots,
+    tubesCompleted: state.tubesCompleted + 1,
+    justCompletedId: -1,
+    undoStack: [], // Clear undo after replacement
+    nextId: state.nextId + 1,
+  };
+}
+
+/** Unlock a locked tube (change status from locked to active). */
+export function unlockTube(state: GameState, index: number): GameState {
+  const newSlots = state.slots.map((s) => ({ ...s, tube: [...s.tube] }));
+  if (newSlots[index]?.status === "locked") {
+    newSlots[index].status = "active";
+  }
+  return { ...state, slots: newSlots };
+}
+
+/** Check if any valid move exists. If not, game is over. */
+export function isGameOver(state: GameState): boolean {
+  for (let from = 0; from < state.slots.length; from++) {
+    for (let to = 0; to < state.slots.length; to++) {
+      if (canPour(state, from, to)) return false;
+    }
+  }
+  return true;
+}
+
+/** Find a valid hint move. Returns [fromIndex, toIndex] or null. */
 export function findHint(state: GameState): [number, number] | null {
-  for (let from = 0; from < state.tubes.length; from++) {
-    for (let to = 0; to < state.tubes.length; to++) {
+  for (let from = 0; from < state.slots.length; from++) {
+    for (let to = 0; to < state.slots.length; to++) {
       if (canPour(state, from, to)) {
         return [from, to];
       }

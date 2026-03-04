@@ -20,7 +20,7 @@ const STEPS = [
   },
   {
     title: "Sort all colors!",
-    description: "Fill each tube with one color to win. Fewer moves = higher IQ!",
+    description: "Complete tubes to score IQ points. The game never stops — how far can you go?",
     icon: "🧠",
   },
 ];

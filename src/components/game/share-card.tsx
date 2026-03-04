@@ -73,7 +73,7 @@ export function ShareCard({ iq, percentile, level, milestone, onClose }: ShareCa
 
     ctx.font = "28px system-ui, sans-serif";
     ctx.fillStyle = "rgba(255,255,255,0.5)";
-    ctx.fillText(`Level ${level} completed`, w / 2, 760);
+    ctx.fillText(`${level} tubes solved`, w / 2, 760);
 
     ctx.strokeStyle = "rgba(177, 78, 255, 0.3)";
     ctx.lineWidth = 2;

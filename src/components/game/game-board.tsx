@@ -2,42 +2,34 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  createGameState,
   canPour,
   pour,
   undo,
   findHint,
+  replaceTube,
+  unlockTube,
+  isGameOver,
+  isTubeComplete,
+  createInitialState,
   type GameState,
 } from "@/lib/game-engine";
-import { generateLevel, getLevelConfig } from "@/lib/level-generator";
-import { loadProgress } from "@/lib/progress";
-import { getPercentile } from "@/lib/scoring";
+import {
+  generateInitialTubes,
+  generateSingleTube,
+  getColorCount,
+} from "@/lib/level-generator";
+import { calculateTubeIQGain, formatIQ, getPercentile, getMilestone } from "@/lib/scoring";
+import { updateBestRun } from "@/lib/progress";
 import { cn } from "@/lib/utils";
 import { Tube } from "./tube";
-import { IqBadge } from "./iq-badge";
-import { playSelect, playPour, playTubeComplete, playError } from "@/lib/sounds";
+import { playSelect, playPour, playTubeComplete, playError, playLevelComplete } from "@/lib/sounds";
 
 interface GameBoardProps {
-  level: number;
-  onComplete: (result: {
-    moves: number;
-    timeSeconds: number;
-    usedUndo: boolean;
-    usedHint: boolean;
-  }) => void;
-  onBack: () => void;
+  onGameOver: (iq: number, tubesCompleted: number) => void;
 }
 
-const COMPLETION_DELAY_MS = 800;
-const SHAKE_DURATION_MS = 400;
-const TWO_ROW_THRESHOLD = 7;
-
 function haptic(pattern: number | number[] = 10) {
-  try {
-    navigator?.vibrate?.(pattern);
-  } catch {
-    /* not supported */
-  }
+  try { navigator?.vibrate?.(pattern); } catch { /* */ }
 }
 
 function formatTime(seconds: number): string {
@@ -46,75 +38,148 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function GameBoard({ level, onComplete, onBack }: GameBoardProps) {
+const INITIAL_COLORS = 4;
+const EMPTY_TUBES = 2;
+
+let _gameSeed = 0;
+let _lastTubeTime = 0;
+
+export function GameBoard({ onGameOver }: GameBoardProps) {
+  const gameOverFired = useRef(false);
+  const completionHandled = useRef(-1);
+
   const [gameState, setGameState] = useState<GameState>(() => {
-    const config = getLevelConfig(level);
-    const tubes = generateLevel(config, level);
-    return createGameState(tubes);
+    const seed = Date.now();
+    _gameSeed = seed;
+    _lastTubeTime = seed;
+    const filled = generateInitialTubes(INITIAL_COLORS, seed);
+    const locked = [generateSingleTube(INITIAL_COLORS, seed + 999)];
+    return createInitialState(filled, EMPTY_TUBES, locked);
   });
 
   const [selectedTube, setSelectedTube] = useState<number | null>(null);
   const [shakingTube, setShakingTube] = useState<number | null>(null);
-  const [pouringFrom, setPouringFrom] = useState<number | null>(null);
-  const [pouringTo, setPouringTo] = useState<number | null>(null);
   const [usedUndo, setUsedUndo] = useState(false);
   const [usedHint, setUsedHint] = useState(false);
   const [hintMove, setHintMove] = useState<[number, number] | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [transitioning, setTransitioning] = useState(true);
-  const completionFiredRef = useRef(false);
+  const [movesSinceLastTube, setMovesSinceLastTube] = useState(0);
 
-  const progress = loadProgress();
-
-  // Timer
   useEffect(() => {
-    if (gameState.isComplete) return;
+    if (gameState.gameOver) return;
     const interval = setInterval(() => {
       setElapsedSeconds(Math.round((Date.now() - gameState.startTime) / 1000));
     }, 1000);
     return () => clearInterval(interval);
-  }, [gameState.isComplete, gameState.startTime]);
+  }, [gameState.gameOver, gameState.startTime]);
 
-  // Clear hint highlight after 2 seconds
   useEffect(() => {
     if (!hintMove) return;
     const timer = setTimeout(() => setHintMove(null), 2000);
     return () => clearTimeout(timer);
   }, [hintMove]);
 
-  // Completion detection
   useEffect(() => {
-    if (gameState.isComplete && !completionFiredRef.current) {
-      completionFiredRef.current = true;
+    if (gameState.justCompletedId >= 0) {
+      playTubeComplete();
       haptic([50, 50, 100]);
-      const timeSeconds = Math.round((Date.now() - gameState.startTime) / 1000);
+    }
+  }, [gameState.justCompletedId]);
+
+  /**
+   * Tube completion handler: after celebration animation, replace the tube.
+   * Uses a timeout so all state updates happen inside the async callback,
+   * satisfying the no-synchronous-setState-in-effect rule.
+   */
+  useEffect(() => {
+    if (gameState.justCompletedId < 0) return;
+    if (completionHandled.current === gameState.justCompletedId) return;
+    completionHandled.current = gameState.justCompletedId;
+
+    const completedIndex = gameState.slots.findIndex(
+      (s) => s.id === gameState.justCompletedId
+    );
+    if (completedIndex === -1) return;
+
+    const now = Date.now();
+    const secsSince = Math.round((now - _lastTubeTime) / 1000);
+    const gain = calculateTubeIQGain({
+      movesSinceLastTube,
+      secondsSinceLastTube: secsSince,
+      usedUndo,
+      usedHint,
+    });
+
+    const exitTimer = setTimeout(() => {
+      const numColors = getColorCount(gameState.tubesCompleted + 1);
+      _gameSeed += 13;
+      const newTube = generateSingleTube(numColors, _gameSeed);
+
+      setGameState((prev) => {
+        const idx = prev.slots.findIndex((s) => s.id === prev.justCompletedId);
+        if (idx === -1) return prev;
+
+        let next = replaceTube(prev, idx, newTube);
+        next = { ...next, iq: prev.iq + gain };
+
+        const lockedIdx = next.slots.findIndex((s) => s.status === "locked");
+        if (lockedIdx !== -1) {
+          next = unlockTube(next, lockedIdx);
+        }
+
+        if ((next.tubesCompleted) % 3 === 0 && next.slots.length < 10) {
+          const lockedTube = generateSingleTube(
+            getColorCount(next.tubesCompleted),
+            _gameSeed + 777
+          );
+          next = {
+            ...next,
+            slots: [
+              ...next.slots,
+              { tube: lockedTube, status: "locked", id: next.nextId },
+            ],
+            nextId: next.nextId + 1,
+          };
+        }
+
+        updateBestRun(next.iq, next.tubesCompleted);
+        return next;
+      });
+
+      setMovesSinceLastTube(0);
+      _lastTubeTime = Date.now();
+      setUsedUndo(false);
+      setUsedHint(false);
+    }, 900);
+
+    return () => clearTimeout(exitTimer);
+  }, [gameState.justCompletedId, gameState.slots, gameState.tubesCompleted, gameState.iq, movesSinceLastTube, usedUndo, usedHint]);
+
+  useEffect(() => {
+    if (gameState.justCompletedId >= 0) return;
+    if (gameState.gameOver) return;
+    if (gameOverFired.current) return;
+
+    if (isGameOver(gameState)) {
+      gameOverFired.current = true;
       const timer = setTimeout(() => {
-        onComplete({ moves: gameState.moves, timeSeconds, usedUndo, usedHint });
-      }, COMPLETION_DELAY_MS);
+        playLevelComplete();
+        setGameState((prev) => ({ ...prev, gameOver: true }));
+        onGameOver(gameState.iq, gameState.tubesCompleted);
+      }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [gameState.isComplete, gameState.moves, gameState.startTime, onComplete, usedUndo, usedHint]);
-
-  // Tube completion sound
-  useEffect(() => {
-    if (gameState.justCompleted !== null) {
-      playTubeComplete();
-    }
-  }, [gameState.justCompleted]);
-
-  // Entrance animation
-  useEffect(() => {
-    const timer = setTimeout(() => setTransitioning(false), 400);
-    return () => clearTimeout(timer);
-  }, []);
+  }, [gameState, onGameOver]);
 
   const handleTubeClick = useCallback(
     (index: number) => {
-      if (gameState.isComplete) return;
+      if (gameState.gameOver) return;
+      if (gameState.slots[index]?.status === "locked") return;
       setHintMove(null);
 
       if (selectedTube === null) {
-        if (gameState.tubes[index].length > 0) {
+        const slot = gameState.slots[index];
+        if (slot && slot.tube.length > 0 && !isTubeComplete(slot.tube)) {
           haptic(5);
           playSelect();
           setSelectedTube(index);
@@ -130,20 +195,14 @@ export function GameBoard({ level, onComplete, onBack }: GameBoardProps) {
       if (canPour(gameState, selectedTube, index)) {
         haptic(15);
         playPour();
-        setPouringFrom(selectedTube);
-        setPouringTo(index);
-
-        setTimeout(() => {
-          setGameState((prev) => pour(prev, selectedTube, index));
-          setSelectedTube(null);
-          setPouringFrom(null);
-          setPouringTo(null);
-        }, 250);
+        setGameState((prev) => pour(prev, selectedTube, index));
+        setMovesSinceLastTube((m) => m + 1);
+        setSelectedTube(null);
       } else {
         haptic([10, 30, 10]);
         playError();
         setShakingTube(index);
-        setTimeout(() => setShakingTube(null), SHAKE_DURATION_MS);
+        setTimeout(() => setShakingTube(null), 400);
         setSelectedTube(null);
       }
     },
@@ -157,21 +216,6 @@ export function GameBoard({ level, onComplete, onBack }: GameBoardProps) {
     setUsedUndo(true);
   }, []);
 
-  const handleRestart = useCallback(() => {
-    haptic(15);
-    const config = getLevelConfig(level);
-    const tubes = generateLevel(config, level);
-    setGameState(createGameState(tubes));
-    setSelectedTube(null);
-    setShakingTube(null);
-    setPouringFrom(null);
-    setPouringTo(null);
-    setUsedUndo(false);
-    setUsedHint(false);
-    setHintMove(null);
-    completionFiredRef.current = false;
-  }, [level]);
-
   const handleHint = useCallback(() => {
     const hint = findHint(gameState);
     if (hint) {
@@ -181,115 +225,84 @@ export function GameBoard({ level, onComplete, onBack }: GameBoardProps) {
     }
   }, [gameState]);
 
-  const tubeCount = gameState.tubes.length;
-  const useTwoRows = tubeCount >= TWO_ROW_THRESHOLD;
-  const topRowCount = useTwoRows ? Math.ceil(tubeCount / 2) : tubeCount;
-  const topRow = gameState.tubes.slice(0, topRowCount);
-  const bottomRow = useTwoRows ? gameState.tubes.slice(topRowCount) : [];
+  const milestone = getMilestone(gameState.iq);
+  const percentile = getPercentile(gameState.iq);
 
-  // Timer color based on elapsed time
   const timerColor =
-    elapsedSeconds < 30
-      ? "text-white/60"
-      : elapsedSeconds < 60
-        ? "text-yellow-400/80"
-        : "text-red-400/80";
+    elapsedSeconds < 60
+      ? "text-white/50"
+      : elapsedSeconds < 180
+        ? "text-yellow-400/70"
+        : "text-red-400/70";
 
-  function renderTubeRow(tubes: typeof gameState.tubes, startIndex: number) {
-    return (
-      <div className="flex items-end justify-center gap-2 sm:gap-3">
-        {tubes.map((colors, i) => {
-          const idx = startIndex + i;
-          return (
-            <div
-              key={idx}
-              className={cn(
-                shakingTube === idx && "animate-[tube-shake_400ms_ease-in-out]",
-              )}
-            >
-              <Tube
-                colors={colors}
-                isSelected={selectedTube === idx}
-                isComplete={gameState.completedTubes[idx]}
-                onClick={() => handleTubeClick(idx)}
-                animatingPour={
-                  pouringFrom === idx
-                    ? "out"
-                    : pouringTo === idx
-                      ? "in"
-                      : null
-                }
-                isHintSource={hintMove?.[0] === idx}
-                isHintTarget={hintMove?.[1] === idx}
-                justCompleted={gameState.justCompleted === idx}
-              />
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
+  const justCompletedId = gameState.justCompletedId;
 
   return (
-    <div
-      className={cn(
-        "flex w-full flex-col items-center gap-5 py-4 transition-all duration-300",
-        transitioning ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0",
-      )}
-    >
-      {/* Top bar */}
-      <div className="flex w-full max-w-md items-center justify-between px-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-lg px-3 py-1.5 text-sm font-medium text-white/30 transition-colors hover:text-white/60 active:scale-95"
-          aria-label="Go back"
-        >
-          ← Back
-        </button>
+    <div className="flex w-full flex-col items-center gap-4 py-3">
+      <div className="flex w-full max-w-lg items-center justify-between px-3">
+        <div className="flex flex-col items-start">
+          <span className="text-[10px] uppercase tracking-widest text-white/30">Tubes</span>
+          <span className="text-lg font-bold tabular-nums">{gameState.tubesCompleted}</span>
+        </div>
 
         <div className="flex flex-col items-center">
-          <span className="text-xs text-white/30">Level {level}</span>
-          <div className="flex items-center gap-3">
-            <span className="text-base font-bold tabular-nums">
-              {gameState.moves} moves
-            </span>
-            <span className={cn("text-xs font-medium tabular-nums", timerColor)}>
-              {formatTime(elapsedSeconds)}
-            </span>
-          </div>
+          <span className={cn("text-xs font-medium tabular-nums", timerColor)}>
+            {formatTime(elapsedSeconds)}
+          </span>
+          <span className="text-[10px] text-white/30">{gameState.moves} moves</span>
         </div>
 
-        <IqBadge iq={progress.iq} percentile={getPercentile(progress.iq)} />
+        <div className="flex flex-col items-end">
+          <span className="text-[10px] uppercase tracking-widest text-white/30">IQ</span>
+          <span className="text-lg font-bold tabular-nums text-purple-400">
+            {formatIQ(gameState.iq)}
+          </span>
+          <span className="text-[9px] text-white/30">Top {percentile}%</span>
+        </div>
       </div>
 
-      {/* Streak */}
-      {progress.streak > 1 && (
-        <div className="text-xs font-medium text-orange-400/80">
-          🔥 {progress.streak} streak
+      {milestone && (
+        <div className="rounded-full bg-purple-500/15 px-4 py-1 text-xs font-semibold text-purple-400">
+          {milestone}
         </div>
       )}
 
-      {/* Tube rows */}
-      <div className="flex flex-col items-center gap-4">
-        {renderTubeRow(topRow, 0)}
-        {bottomRow.length > 0 && renderTubeRow(bottomRow, topRowCount)}
+      <div className="flex flex-wrap items-end justify-center gap-1.5 sm:gap-2 px-2 max-w-lg">
+        {gameState.slots.map((slot, idx) => (
+          <div
+            key={slot.id}
+            className={cn(
+              shakingTube === idx && "animate-[tube-shake_400ms_ease-in-out]",
+            )}
+          >
+            <Tube
+              colors={slot.tube}
+              status={slot.status}
+              isSelected={selectedTube === idx}
+              isComplete={isTubeComplete(slot.tube)}
+              onClick={() => handleTubeClick(idx)}
+              isHintSource={hintMove?.[0] === idx}
+              isHintTarget={hintMove?.[1] === idx}
+              justCompleted={slot.id === justCompletedId}
+              exiting={false}
+              entering={false}
+            />
+          </div>
+        ))}
       </div>
 
-      {/* Bottom controls */}
-      <div className="flex w-full max-w-md items-center justify-center gap-3 px-4">
+      <div className="flex items-center gap-3 pt-2">
         <button
           type="button"
           onClick={handleUndo}
           disabled={gameState.undoStack.length === 0}
           className={cn(
-            "rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium",
+            "rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium",
             "transition-all active:scale-95",
             gameState.undoStack.length === 0
               ? "cursor-not-allowed opacity-30"
               : "hover:bg-white/10",
           )}
-          aria-label="Undo last move"
         >
           ↩ Undo
         </button>
@@ -297,19 +310,9 @@ export function GameBoard({ level, onComplete, onBack }: GameBoardProps) {
         <button
           type="button"
           onClick={handleHint}
-          className="rounded-xl border border-purple-500/20 bg-purple-500/10 px-4 py-2.5 text-sm font-medium text-purple-400 transition-all hover:bg-purple-500/20 active:scale-95"
-          aria-label="Get a hint"
+          className="rounded-xl border border-purple-500/20 bg-purple-500/10 px-5 py-2.5 text-sm font-medium text-purple-400 transition-all hover:bg-purple-500/20 active:scale-95"
         >
           💡 Hint
-        </button>
-
-        <button
-          type="button"
-          onClick={handleRestart}
-          className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium transition-all hover:bg-white/10 active:scale-95"
-          aria-label="Restart level"
-        >
-          ↻ Restart
         </button>
       </div>
     </div>
