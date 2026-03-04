@@ -12,9 +12,9 @@ export const VIEW_DISTANCE = 280;
 export const ROAD_WIDTH = 6.0; // World units total road width
 
 // Speed settings
-export const INITIAL_SPEED = 50; // Slower start for playability
-export const MAX_SPEED = 200;
-export const SPEED_INCREMENT = 0.4; // Gentler acceleration
+export const INITIAL_SPEED = 30; // Very slow start, speeds up over time
+export const MAX_SPEED = 180;
+export const SPEED_INCREMENT = 0.5; // Gradual acceleration
 export const SPEED_BOOST_AMOUNT = 40;
 export const SPEED_BOOST_DURATION = 1.5; // seconds
 

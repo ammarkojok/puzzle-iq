@@ -624,29 +624,23 @@ function drawAssetCharacter(
     ctx.restore();
   }
 
-  // Draw character with 'screen' blend mode to remove black background.
-  // This makes dark clothes semi-transparent but neon parts glow through.
-  // We draw it twice: once normal for the base, once screen for the glow.
-
-  // First pass: draw normally at reduced opacity for the base shape
-  ctx.save();
-  ctx.globalAlpha = 0.85;
-  ctx.drawImage(charImg, drawX, drawY, charW, charH);
-  ctx.restore();
-
-  // Second pass: screen blend for neon glow effect on bright parts
+  // Use 'screen' blend mode: black background becomes transparent,
+  // neon parts (mohawk, shoes, jacket stripes) glow through.
+  // Draw multiple passes to make the character bright and visible.
   ctx.save();
   ctx.globalCompositeOperation = "screen";
-  ctx.globalAlpha = 0.6;
-  ctx.drawImage(charImg, drawX, drawY, charW, charH);
-  ctx.restore();
 
-  // Neon outline glow around the character
-  ctx.save();
-  ctx.shadowColor = "#00d4ff";
-  ctx.shadowBlur = 12;
-  ctx.globalAlpha = 0;
+  // Pass 1: full opacity base
   ctx.drawImage(charImg, drawX, drawY, charW, charH);
+
+  // Pass 2: extra brightness to make dark clothing more visible
+  ctx.globalAlpha = 0.7;
+  ctx.drawImage(charImg, drawX, drawY, charW, charH);
+
+  // Pass 3: another pass for neon glow intensity
+  ctx.globalAlpha = 0.4;
+  ctx.drawImage(charImg, drawX, drawY, charW, charH);
+
   ctx.restore();
 }
 
