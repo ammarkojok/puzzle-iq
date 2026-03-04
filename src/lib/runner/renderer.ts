@@ -191,12 +191,38 @@ function drawRoad(
   const horizon = h * HORIZON_RATIO;
   const roadHalf = ROAD_WIDTH / 2;
 
-  // Ground plane below the road (dark purple)
+  // Ground plane below the road (dark purple gradient)
   const groundGrad = ctx.createLinearGradient(0, horizon, 0, h);
   groundGrad.addColorStop(0, "#1a0a35");
   groundGrad.addColorStop(1, "#0d0520");
   ctx.fillStyle = groundGrad;
   ctx.fillRect(0, horizon, w, h - horizon);
+
+  // Ground texture: faint horizontal scan-lines for depth
+  for (let gy = horizon; gy < h; gy += 6) {
+    const t = (gy - horizon) / (h - horizon); // 0 at horizon, 1 at bottom
+    const lineAlpha = t * 0.06;
+    ctx.fillStyle = `rgba(80, 40, 140, ${lineAlpha})`;
+    ctx.fillRect(0, gy, w, 1);
+  }
+
+  // Ground texture: sparse grid dots that scroll with distance
+  const dotSpacing = 28;
+  const dotScrollY = (distance * 0.6) % dotSpacing;
+  for (let gy = horizon + 4; gy < h; gy += dotSpacing) {
+    const t = (gy - horizon) / (h - horizon);
+    const dotAlpha = t * 0.08;
+    const scrolledY = gy + dotScrollY;
+    if (scrolledY > h) continue;
+    for (let gx = 0; gx < w; gx += dotSpacing * 1.5) {
+      // Skip dots that fall under the road surface
+      const roadHalfAtY =
+        roadHalf * (VIEW_DISTANCE / Math.max(0.5, (scrolledY - horizon) / CAMERA_HEIGHT));
+      if (Math.abs(gx - w / 2) < roadHalfAtY) continue;
+      ctx.fillStyle = `rgba(100, 60, 180, ${dotAlpha})`;
+      ctx.fillRect(gx, scrolledY, 1.5, 1.5);
+    }
+  }
 
   // Draw road segments from far to near
   for (let i = ROAD_SEGMENT_COUNT; i > 0; i--) {
@@ -234,12 +260,12 @@ function drawRoad(
     ctx.closePath();
     ctx.fill();
 
-    // Neon road edges - purple glow lines
+    // Neon road edges - subtle purple glow lines
     const edgeAlpha = Math.min(1, 2 / (i * 0.25 + 1));
-    const edgeWidth = Math.max(1, 3 * nearScale * 0.015);
+    const edgeWidth = Math.max(0.5, 2 * nearScale * 0.01);
 
     // Left edge
-    ctx.strokeStyle = `rgba(160, 80, 255, ${edgeAlpha * 0.9})`;
+    ctx.strokeStyle = `rgba(160, 80, 255, ${edgeAlpha * 0.5})`;
     ctx.lineWidth = edgeWidth;
     ctx.beginPath();
     ctx.moveTo(farLeftX, farY);
@@ -247,6 +273,7 @@ function drawRoad(
     ctx.stroke();
 
     // Right edge
+    ctx.strokeStyle = `rgba(160, 80, 255, ${edgeAlpha * 0.5})`;
     ctx.beginPath();
     ctx.moveTo(farRightX, farY);
     ctx.lineTo(nearRightX, nearY);
@@ -319,8 +346,7 @@ function drawGate(
   ctx: CanvasRenderingContext2D,
   entity: Entity,
   w: number,
-  h: number,
-  assets: GameAssets | null
+  h: number
 ) {
   const laneX = LANE_POSITIONS[entity.lane];
   const screen = projectToScreen({ x: laneX, y: 0, z: entity.z }, w, h);
@@ -339,32 +365,8 @@ function drawGate(
 
   ctx.save();
 
-  // Draw gate arch image if available, otherwise procedural
-  if (assets?.gateArch && gateWidth > 10) {
-    const imgW = gateWidth * 1.3;
-    const imgH = gateHeight * 1.2;
-
-    ctx.globalAlpha = 0.85;
-    ctx.shadowColor = hex;
-    ctx.shadowBlur = Math.min(30, gateWidth * 0.5);
-    ctx.drawImage(assets.gateArch, x - imgW / 2, y - imgH, imgW, imgH);
-
-    ctx.globalCompositeOperation = "source-atop";
-    ctx.fillStyle = hex;
-    ctx.globalAlpha = 0.4;
-    ctx.fillRect(x - imgW / 2, y - imgH, imgW, imgH);
-    ctx.globalCompositeOperation = "source-over";
-    ctx.globalAlpha = 1;
-    ctx.shadowBlur = 0;
-
-    // Color label circle
-    if (gateWidth > 15) {
-      drawGateLabel(ctx, x, y, gateWidth, gateHeight, hex, entity.color);
-    }
-  } else {
-    // Procedural gate rendering (primary path)
-    drawProceduralGate(ctx, x, y, gateWidth, gateHeight, hex, glow, entity.color);
-  }
+  // Always use procedural gate rendering (asset images have opaque backgrounds)
+  drawProceduralGate(ctx, x, y, gateWidth, gateHeight, hex, glow, entity.color);
 
   ctx.restore();
 }
@@ -493,14 +495,13 @@ function drawCharacter(
   w: number,
   h: number,
   animFrame: number,
-  speedBoost: boolean,
-  assets: GameAssets | null
+  speedBoost: boolean
 ) {
   const screen = projectToScreen({ x: laneX, y: 0, z: CHARACTER_Z }, w, h);
 
-  // Character size based on perspective scale, with a minimum
-  // to ensure prominence. The character should be about 15-20% of screen height.
-  const baseSize = Math.max(h * 0.04, screen.scale * 1.2);
+  // Character size: cap at ~10-12% of screen height to avoid
+  // the scale-based value blowing up at close z distances.
+  const baseSize = Math.min(h * 0.035, Math.max(12, screen.scale * 0.25));
   const x = screen.x;
   const y = screen.y;
 
@@ -518,18 +519,8 @@ function drawCharacter(
     ctx.shadowBlur = 30;
   }
 
-  // Use image asset if available
-  if (assets?.characterFrames && assets.characterFrames.length > 0) {
-    const frameIdx = animFrame % assets.characterFrames.length;
-    const charImg = assets.characterFrames[frameIdx];
-    const charH = baseSize * 4;
-    const charW = charH * (charImg.width / charImg.height);
-
-    ctx.drawImage(charImg, x - charW / 2, y - charH, charW, charH);
-  } else {
-    // Procedural character (primary fallback)
-    drawProceduralCharacter(ctx, x, y, baseSize, animFrame, speedBoost);
-  }
+  // Always use procedural character (asset images have opaque backgrounds)
+  drawProceduralCharacter(ctx, x, y, baseSize, animFrame, speedBoost);
 
   ctx.restore();
 }
@@ -771,7 +762,7 @@ export function render(
 
   // Draw entities
   for (const entity of sortedEntities) {
-    drawGate(ctx, entity, w, h, assets);
+    drawGate(ctx, entity, w, h);
   }
 
   // Character
@@ -781,8 +772,7 @@ export function render(
     w,
     h,
     state.animFrame,
-    state.speedBoostTimer > 0,
-    assets
+    state.speedBoostTimer > 0
   );
 
   // Particles
