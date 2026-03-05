@@ -40,8 +40,8 @@ export async function createCharacter3D(): Promise<Character3D> {
   const scene = new THREE.Scene();
 
   // ── Camera - positioned behind and above character ─────────
-  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-  camera.position.set(0, 2.2, -4.0);
+  const camera = new THREE.PerspectiveCamera(35, 1, 0.5, 100);
+  camera.position.set(0, 2.5, -5.0);
   camera.lookAt(0, 0.7, 0.5);
 
   // ── Lighting - neon cyberpunk rim lights ────────────────────
@@ -163,7 +163,7 @@ export async function createCharacter3D(): Promise<Character3D> {
       mixer.update(dt);
       // Lock root position to prevent running animation vertical bobbing
       if (model) {
-        model.position.y = 0;
+        model.position.set(0, 0, 0);
       }
       renderer.render(scene, camera);
     },

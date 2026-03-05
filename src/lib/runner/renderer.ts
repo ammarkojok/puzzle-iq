@@ -189,12 +189,14 @@ function drawRoad(
   ctx.closePath();
   ctx.fill();
 
-  // Road texture overlay — iterate Z-space for uniform perspective sampling
-  if (assets?.roadTexture) {
-    const texImg = assets.roadTexture;
+  // Road texture overlay — Z-space strip rendering with FLAT texture
+  // The flat texture has no perspective baked in, so sampling horizontal strips
+  // at varying widths naturally creates correct perspective projection.
+  if (assets?.roadTextureFlat) {
+    const texImg = assets.roadTextureFlat;
     ctx.save();
 
-    // Clip to road trapezoid for smooth diagonal edges
+    // Clip to road trapezoid
     ctx.beginPath();
     ctx.moveTo(farLeftX, farY);
     ctx.lineTo(farRightX, farY);
@@ -203,48 +205,62 @@ function drawRoad(
     ctx.closePath();
     ctx.clip();
 
-    // Iterate in Z-space (uniform world steps → natural perspective density)
-    const zMin = 2.0;
-    const zMax = zFar;
-    const zSteps = 120;
-    const texScrollSpeed = 0.8;
-    const texTotalH = texImg.height;
+    ctx.globalAlpha = 0.85;
 
-    for (let si = 0; si < zSteps; si++) {
-      // Linear Z from far to near
-      const zTop = zMax - (si / zSteps) * (zMax - zMin);
-      const zBot = zMax - ((si + 1) / zSteps) * (zMax - zMin);
+    // Z-space strip rendering: iterate from far Z to near Z
+    // Each strip samples one horizontal row from the flat texture
+    // and draws it at the correct perspective-projected width and Y position
+    const STRIP_COUNT = 150;
+    const Z_FAR = zFar;
+    const Z_NEAR = 2.0;
 
-      const scaleTop = VIEW_DISTANCE / zTop;
-      const scaleBot = VIEW_DISTANCE / zBot;
-      const yTop = horizon + CAMERA_HEIGHT * scaleTop;
-      const yBot = horizon + CAMERA_HEIGHT * scaleBot;
+    // Texture scrolling: the texture V coordinate advances with distance
+    const texScrollSpeed = 0.08;
+    const texScroll = (distance * texScrollSpeed) % texImg.height;
 
-      if (yTop > h + 10 || yBot < horizon) continue;
+    for (let si = 0; si < STRIP_COUNT; si++) {
+      // Non-linear Z distribution: more strips near camera for detail
+      const t = si / STRIP_COUNT;
+      const z = Z_FAR * Math.pow(Z_NEAR / Z_FAR, t);
 
-      const leftX = w / 2 - roadHalf * scaleBot;
-      const roadW = ROAD_WIDTH * scaleBot;
+      const scale = VIEW_DISTANCE / z;
+      const screenY = horizon + CAMERA_HEIGHT * scale;
+      const roadW = ROAD_WIDTH * scale;
+      const screenX = w / 2 - roadW / 2;
 
-      // Fade texture alpha near camera (bottom of screen) to hide stretching
-      const t = si / zSteps; // 0=far, 1=near
-      const fadeAlpha = t > 0.85 ? 0.35 * (1 - (t - 0.85) / 0.15) : 0.35;
-      ctx.globalAlpha = fadeAlpha;
+      // Next strip for height calculation
+      const tNext = (si + 1) / STRIP_COUNT;
+      const zNext = Z_FAR * Math.pow(Z_NEAR / Z_FAR, tNext);
+      const screenYNext = horizon + CAMERA_HEIGHT * (VIEW_DISTANCE / zNext);
+      const stripH = Math.max(1, screenYNext - screenY + 0.5);
 
-      // Map Z to texture source coordinate (scrolling with distance)
-      const zMid = (zTop + zBot) / 2;
-      const texSrcY = ((zMid * 0.5 + distance * texScrollSpeed) % texTotalH + texTotalH) % texTotalH;
-      const srcStripH = Math.max(1, (texTotalH / zSteps) * 1.5);
-      const drawH = Math.max(1, yBot - yTop + 1);
+      if (screenY > nearY || screenYNext < farY) continue;
 
-      if (texSrcY + srcStripH <= texTotalH) {
-        ctx.drawImage(texImg, 0, texSrcY, texImg.width, srcStripH, leftX, yTop, roadW, drawH);
-      } else {
-        const firstH = texTotalH - texSrcY;
-        const ratio = firstH / srcStripH;
-        ctx.drawImage(texImg, 0, texSrcY, texImg.width, firstH, leftX, yTop, roadW, drawH * ratio);
-        ctx.drawImage(texImg, 0, 0, texImg.width, srcStripH - firstH, leftX, yTop + drawH * ratio, roadW, drawH * (1 - ratio));
-      }
+      // Sample from flat texture: V coordinate based on world Z + scroll
+      const texV = ((z * 3 + texScroll) % texImg.height);
+      const texStripH = Math.max(1, (texImg.height / STRIP_COUNT) * 1.5);
+
+      ctx.drawImage(
+        texImg,
+        0, texV, texImg.width, texStripH,         // source: full width, thin horizontal strip
+        screenX, screenY, roadW, stripH             // dest: perspective-projected width
+      );
     }
+
+    // Subtle bottom fade
+    const roadAreaH = nearY - farY;
+    const bottomFade = ctx.createLinearGradient(0, nearY - roadAreaH * 0.15, 0, nearY);
+    bottomFade.addColorStop(0, "rgba(10, 6, 24, 0)");
+    bottomFade.addColorStop(1, "rgba(10, 6, 24, 0.4)");
+    ctx.fillStyle = bottomFade;
+    ctx.fillRect(0, nearY - roadAreaH * 0.15, w, roadAreaH * 0.15);
+
+    // Horizon fog blend
+    const topFade = ctx.createLinearGradient(0, farY, 0, farY + roadAreaH * 0.12);
+    topFade.addColorStop(0, "rgba(10, 6, 24, 0.6)");
+    topFade.addColorStop(1, "rgba(10, 6, 24, 0)");
+    ctx.fillStyle = topFade;
+    ctx.fillRect(0, farY, w, roadAreaH * 0.12);
 
     ctx.globalAlpha = 1;
     ctx.restore();
@@ -310,30 +326,6 @@ function drawRoad(
   strokePolyline(rightEdgePoints);
   ctx.restore();
 
-  // Lane dividers (between lanes)
-  const dividerLeft = (LANE_POSITIONS[0] + LANE_POSITIONS[1]) / 2;  // -1.4
-  const dividerRight = (LANE_POSITIONS[1] + LANE_POSITIONS[2]) / 2; // 1.4
-  const leftDividerPoints = buildPerspectiveLine(dividerLeft);
-  const rightDividerPoints = buildPerspectiveLine(dividerRight);
-
-  // Dark shadow backing for dividers
-  ctx.save();
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.4)";
-  ctx.lineWidth = 3;
-  strokePolyline(leftDividerPoints);
-  strokePolyline(rightDividerPoints);
-  ctx.restore();
-
-  // Bright magenta dividers
-  ctx.save();
-  ctx.shadowColor = "#d050ff";
-  ctx.shadowBlur = 8;
-  ctx.strokeStyle = "rgba(208, 80, 255, 0.6)";
-  ctx.lineWidth = 1.5;
-  strokePolyline(leftDividerPoints);
-  strokePolyline(rightDividerPoints);
-  ctx.restore();
-
   // Speed chevrons on road
   if (speed > 40) {
     const chevronSpacing = 20;
@@ -387,299 +379,190 @@ function drawRoad(
   }
 }
 
-// ── Side Buildings (City Corridor) ────────────────────────────────
+// ── Parallax Layer Helper ─────────────────────────────────────────
 
-/**
- * Simple seeded pseudo-random number generator.
- * Returns a stable value in [0, 1) for a given integer seed,
- * so building properties remain consistent across frames.
- */
-function seededRandom(seed: number): number {
-  // Robert Jenkins' 32-bit integer hash
-  let s = seed | 0;
-  s = ((s + 0x7ed55d16) + (s << 12)) & 0xffffffff;
-  s = ((s ^ 0xc761c23c) ^ (s >>> 19)) & 0xffffffff;
-  s = ((s + 0x165667b1) + (s << 5)) & 0xffffffff;
-  s = ((s + 0xd3a2646c) ^ (s << 9)) & 0xffffffff;
-  s = ((s + 0xfd7046c5) + (s << 3)) & 0xffffffff;
-  s = ((s ^ 0xb55a4f09) ^ (s >>> 16)) & 0xffffffff;
-  return (s >>> 0) / 0xffffffff;
+function drawParallaxLayer(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  w: number,
+  h: number,
+  distance: number,
+  opts: {
+    scrollSpeed: number;
+    alpha: number;
+    yTop: number;
+    yBottom: number;
+    fogBottom: boolean;
+    fogTop: boolean;
+  }
+) {
+  const imgAspect = img.width / img.height;
+  const drawH = opts.yBottom - opts.yTop;
+  const drawW = drawH * imgAspect;
+  if (drawW <= 0 || drawH <= 0) return;
+
+  const scrollX = -(distance * opts.scrollSpeed) % drawW;
+
+  ctx.save();
+  ctx.globalAlpha = opts.alpha;
+
+  // Clip to vertical bounds
+  ctx.beginPath();
+  ctx.rect(0, opts.yTop, w, drawH);
+  ctx.clip();
+
+  // Tile horizontally
+  for (let tx = scrollX - drawW; tx < w + drawW; tx += drawW) {
+    ctx.drawImage(img, tx, opts.yTop, drawW, drawH);
+  }
+
+  // Bottom fog blend (building-to-road transition)
+  if (opts.fogBottom) {
+    ctx.globalAlpha = 1;
+    const fogH = drawH * 0.2;
+    const fogGrad = ctx.createLinearGradient(0, opts.yBottom - fogH, 0, opts.yBottom);
+    fogGrad.addColorStop(0, "rgba(10, 6, 24, 0)");
+    fogGrad.addColorStop(0.6, "rgba(10, 6, 24, 0.5)");
+    fogGrad.addColorStop(1, "rgba(10, 6, 24, 0.95)");
+    ctx.fillStyle = fogGrad;
+    ctx.fillRect(0, opts.yBottom - fogH, w, fogH);
+  }
+
+  // Top fade (atmospheric depth)
+  if (opts.fogTop) {
+    ctx.globalAlpha = 1;
+    const topFogH = drawH * 0.12;
+    const topGrad = ctx.createLinearGradient(0, opts.yTop, 0, opts.yTop + topFogH);
+    topGrad.addColorStop(0, "rgba(10, 6, 24, 0.6)");
+    topGrad.addColorStop(1, "rgba(10, 6, 24, 0)");
+    ctx.fillStyle = topGrad;
+    ctx.fillRect(0, opts.yTop, w, topFogH);
+  }
+
+  ctx.restore();
 }
 
+// ── Side Buildings (Parallax Layers) ─────────────────────────────
+
 /**
- * Draw immersive side buildings on both sides of the road, creating
- * a city-corridor / canyon effect. Buildings are drawn in perspective
- * from far to near, scrolling with the road via the `distance` param.
- *
- * Each building is a dark rectangle with neon-lit window grids, accent
- * edge lines, and occasional neon billboard strips near the top.
+ * Draw buildings using parallax scrolling layers:
+ * Layer 1: Distant skyline panorama (slow scroll)
+ * Layer 2: Mid-distance corridor buildings (medium scroll)
  */
 function drawSideBuildings(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
-  distance: number
+  distance: number,
+  assets: GameAssets | null
 ) {
   const horizon = h * HORIZON_RATIO;
-  const roadHalf = ROAD_WIDTH / 2;
 
-  // Building placement parameters
-  const BUILDING_COUNT = 16; // buildings per side
-  const BUILDING_SPACING = 18; // world-unit spacing along Z axis
-  const BUILDING_GAP = 0.2; // gap between road edge and building inner edge (world units)
+  // ── Layer 1: Distant skyline panorama ──
+  if (assets?.skylinePanorama) {
+    const skyImg = assets.skylinePanorama;
+    const skyAspect = skyImg.width / skyImg.height;
+    const skylineHeight = h * 0.35;
+    const skylineWidth = skylineHeight * skyAspect;
+    const parallaxSpeed = 0.02;
+    const scrollX = (distance * parallaxSpeed) % skylineWidth;
+    const totalY = horizon - skylineHeight;
+    const extendBelow = 15;
+    const totalH = skylineHeight + extendBelow;
 
-  // Scroll offset: buildings repeat every (BUILDING_COUNT * BUILDING_SPACING)
-  const totalCycleLength = BUILDING_COUNT * BUILDING_SPACING;
-  const scrollOffset = distance % totalCycleLength;
+    ctx.save();
+    ctx.globalAlpha = 0.9;
 
-  // The "generation index" tells us which cycle we are in, used to seed
-  // building properties so they change each cycle for visual variety.
-  const cycleIndex = Math.floor(distance / totalCycleLength);
-
-  ctx.save();
-
-  // Draw from far to near for correct painter's algorithm overlap
-  for (let i = BUILDING_COUNT - 1; i >= 0; i--) {
-    // Z position of this building's near face, scrolling toward camera
-    const baseZ = (i + 1) * BUILDING_SPACING - scrollOffset;
-
-    // Skip buildings behind the camera or too far away
-    if (baseZ < 2) continue;
-    if (baseZ > ROAD_SEGMENT_COUNT * 4 + 20) continue;
-
-    const zNear = baseZ;
-    const zFar = baseZ + BUILDING_SPACING * 0.85; // building depth along Z
-
-    const nearScale = VIEW_DISTANCE / zNear;
-    const farScale = VIEW_DISTANCE / zFar;
-
-    const yNear = horizon + CAMERA_HEIGHT * nearScale;
-    const yFar = horizon + CAMERA_HEIGHT * farScale;
-
-    // Skip buildings entirely off-screen
-    if (yFar > h + 10 && yNear > h + 10) continue;
-    if (yNear < horizon) continue;
-
-    // Seed for this specific building slot -- stable within a cycle
-    const slotSeed = i * 31 + cycleIndex * 997;
-
-    // Building width variation per slot
-    const widthRand = seededRandom(slotSeed + 7);
-    const buildingDepth = 3.0 + widthRand * 2.0; // 3.0..5.0 world units
-
-    // Building height varies per slot (tall city feel)
-    const heightRand = seededRandom(slotSeed + 1);
-    const buildingWorldHeight = 6 + heightRand * 10; // 6..16 world units tall
-
-    // The building top in screen coords
-    const nearTopY = yNear - buildingWorldHeight * nearScale;
-    const farTopY = yFar - buildingWorldHeight * farScale;
-
-    // Clamp tops to at least a few pixels above horizon for very tall buildings
-    const clampedNearTopY = Math.max(horizon - h * 0.25, nearTopY);
-    const clampedFarTopY = Math.max(horizon - h * 0.25, farTopY);
-
-    // Distance-based alpha fade so far buildings are subtle
-    const distFade = Math.min(1, 3.0 / (i * 0.4 + 1));
-
-    // Draw on both sides
-    for (let side = -1; side <= 1; side += 2) {
-      // side = -1 for left, +1 for right
-      const isLeft = side === -1;
-      const sideSeed = slotSeed + (isLeft ? 0 : 5000);
-
-      // Inner edge of building (just outside road)
-      const nearInnerX = w / 2 + side * (roadHalf + BUILDING_GAP) * nearScale;
-      const farInnerX = w / 2 + side * (roadHalf + BUILDING_GAP) * farScale;
-
-      // Outer edge of building
-      const nearOuterX = w / 2 + side * (roadHalf + BUILDING_GAP + buildingDepth) * nearScale;
-      const farOuterX = w / 2 + side * (roadHalf + BUILDING_GAP + buildingDepth) * farScale;
-
-      // Building body: dark trapezoid
-      const bodyColorSeed = seededRandom(sideSeed + 2);
-      const r = Math.floor(10 + bodyColorSeed * 8);
-      const g = Math.floor(5 + bodyColorSeed * 3);
-      const b = Math.floor(32 + bodyColorSeed * 16);
-
-      ctx.globalAlpha = distFade;
-      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-      ctx.beginPath();
-      // Trace: far-inner, far-outer, near-outer, near-inner
-      ctx.moveTo(farInnerX, yFar);
-      ctx.lineTo(farOuterX, yFar);
-      ctx.lineTo(nearOuterX, yNear);
-      ctx.lineTo(nearInnerX, yNear);
-      ctx.closePath();
-      ctx.fill();
-
-      // Building top face (connects far-top to near-top)
-      ctx.beginPath();
-      ctx.moveTo(farInnerX, clampedFarTopY);
-      ctx.lineTo(farOuterX, clampedFarTopY);
-      ctx.lineTo(nearOuterX, clampedNearTopY);
-      ctx.lineTo(nearInnerX, clampedNearTopY);
-      ctx.closePath();
-      ctx.fill();
-
-      // Building front face (the side facing camera, between top and bottom)
-      ctx.fillStyle = `rgb(${r - 2}, ${g - 1}, ${b - 5})`;
-      ctx.beginPath();
-      ctx.moveTo(farInnerX, yFar);
-      ctx.lineTo(farOuterX, yFar);
-      ctx.lineTo(farOuterX, clampedFarTopY);
-      ctx.lineTo(farInnerX, clampedFarTopY);
-      ctx.closePath();
-      ctx.fill();
-
-      // Inner wall face (visible face toward road)
-      ctx.fillStyle = `rgb(${r + 2}, ${g + 1}, ${b + 3})`;
-      ctx.beginPath();
-      ctx.moveTo(nearInnerX, yNear);
-      ctx.lineTo(farInnerX, yFar);
-      ctx.lineTo(farInnerX, clampedFarTopY);
-      ctx.lineTo(nearInnerX, clampedNearTopY);
-      ctx.closePath();
-      ctx.fill();
-
-      // Neon edge accent on the inner building edge (facing the road)
-      const accentColor = isLeft ? "rgba(0, 229, 255," : "rgba(208, 80, 255,";
-      const accentShadow = isLeft ? "#00e5ff" : "#d050ff";
-      const edgeAlpha = distFade * 0.5;
-      const edgeW = Math.max(0.5, 1.5 * nearScale * 0.006);
-
-      ctx.save();
-      ctx.shadowColor = accentShadow;
-      ctx.shadowBlur = Math.min(8, edgeW * 5);
-      ctx.strokeStyle = `${accentColor} ${edgeAlpha})`;
-      ctx.lineWidth = edgeW;
-      ctx.beginPath();
-      ctx.moveTo(nearInnerX, yNear);
-      ctx.lineTo(farInnerX, yFar);
-      ctx.lineTo(farInnerX, clampedFarTopY);
-      ctx.lineTo(nearInnerX, clampedNearTopY);
-      ctx.stroke();
-      ctx.restore();
-
-      // ── Windows: small glowing dots in a grid on the inner face ──
-      // Only draw windows if the building face is wide enough to see
-      const faceScreenWidth = Math.abs(nearInnerX - farInnerX);
-      const faceScreenHeight = Math.abs(yNear - clampedNearTopY);
-
-      if (faceScreenWidth > 4 && faceScreenHeight > 8 && distFade > 0.2) {
-        const windowCols = Math.min(4, Math.max(1, Math.floor(faceScreenWidth / 6)));
-        const windowRows = Math.min(12, Math.max(2, Math.floor(faceScreenHeight / 6)));
-
-        for (let row = 0; row < windowRows; row++) {
-          for (let col = 0; col < windowCols; col++) {
-            // Determine if this window is lit
-            const winSeed = seededRandom(sideSeed + row * 17 + col * 53 + 300);
-            if (winSeed < 0.35) continue; // 35% of windows are dark
-
-            // Interpolate position on the inner face
-            const rowT = (row + 0.5) / windowRows;
-            const colT = (col + 0.5) / windowCols;
-
-            // Vertically: from near-top to near-bottom, interpolated along the face
-            // Horizontally: interpolated between inner-near and inner-far
-            const winX = nearInnerX + (farInnerX - nearInnerX) * colT;
-            const winTopY = clampedNearTopY + (clampedFarTopY - clampedNearTopY) * colT;
-            const winBotY = yNear + (yFar - yNear) * colT;
-            const winY = winTopY + (winBotY - winTopY) * rowT;
-
-            // Window color varies
-            const colorSeed = seededRandom(sideSeed + row * 7 + col * 13 + 500);
-            let winColor: string;
-            if (colorSeed < 0.35) {
-              // Warm yellow (apartment lights)
-              winColor = `rgba(255, 220, 120, ${distFade * 0.6})`;
-            } else if (colorSeed < 0.6) {
-              // Cyan (screens / neon)
-              winColor = `rgba(0, 200, 255, ${distFade * 0.5})`;
-            } else if (colorSeed < 0.8) {
-              // Purple
-              winColor = `rgba(180, 100, 255, ${distFade * 0.45})`;
-            } else {
-              // White (bright office)
-              winColor = `rgba(220, 220, 255, ${distFade * 0.5})`;
-            }
-
-            const winSize = Math.max(0.8, nearScale * 0.12);
-            ctx.fillStyle = winColor;
-            ctx.fillRect(winX - winSize / 2, winY - winSize / 2, winSize, winSize);
-          }
-        }
-      }
-
-      // ── Neon billboard / sign strip near the top of some buildings ──
-      const billboardSeed = seededRandom(sideSeed + 800);
-      if (billboardSeed > 0.55 && faceScreenHeight > 20) {
-        const billY = clampedNearTopY + faceScreenHeight * 0.12;
-        const billFarY = clampedFarTopY + Math.abs(yFar - clampedFarTopY) * 0.12;
-        const billH = Math.max(2, faceScreenHeight * 0.06);
-
-        // Billboard color
-        const billColorSeed = seededRandom(sideSeed + 900);
-        let billColor: string;
-        let billShadow: string;
-        // Neon sign breathing pulse
-        const neonPulse = 0.7 + 0.3 * Math.sin(distance * 0.03 + i * 1.7);
-        if (billColorSeed < 0.33) {
-          billColor = `rgba(255, 60, 120, ${distFade * 0.7 * neonPulse})`;
-          billShadow = "#ff3c78";
-        } else if (billColorSeed < 0.66) {
-          billColor = `rgba(0, 255, 180, ${distFade * 0.6 * neonPulse})`;
-          billShadow = "#00ffb4";
-        } else {
-          billColor = `rgba(255, 200, 0, ${distFade * 0.65 * neonPulse})`;
-          billShadow = "#ffc800";
-        }
-
-        ctx.save();
-        ctx.shadowColor = billShadow;
-        ctx.shadowBlur = Math.min(10, nearScale * 0.5);
-        ctx.fillStyle = billColor;
-        ctx.beginPath();
-        ctx.moveTo(nearInnerX, billY);
-        ctx.lineTo(farInnerX, billFarY);
-        ctx.lineTo(farInnerX, billFarY + billH * farScale / nearScale);
-        ctx.lineTo(nearInnerX, billY + billH);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // ── Antenna / spike silhouette on some building tops ──
-      const antennaSeed = seededRandom(sideSeed + 1100);
-      if (antennaSeed > 0.6 && faceScreenWidth > 6) {
-        const antMidX = (nearInnerX + farInnerX) / 2;
-        const antBaseY = (clampedNearTopY + clampedFarTopY) / 2;
-        const antHeight = Math.max(3, faceScreenHeight * 0.15);
-
-        ctx.strokeStyle = `rgba(60, 30, 100, ${distFade * 0.8})`;
-        ctx.lineWidth = Math.max(0.5, nearScale * 0.01);
-        ctx.beginPath();
-        ctx.moveTo(antMidX, antBaseY);
-        ctx.lineTo(antMidX, antBaseY - antHeight);
-        ctx.stroke();
-
-        // Tiny blinking light at antenna tip
-        const blinkPhase = Math.sin(distance * 0.05 + i * 3.7 + (isLeft ? 0 : 1.5));
-        if (blinkPhase > 0) {
-          ctx.save();
-          ctx.shadowColor = "#ff2040";
-          ctx.shadowBlur = 4;
-          ctx.fillStyle = `rgba(255, 50, 80, ${blinkPhase * distFade * 0.8})`;
-          ctx.beginPath();
-          ctx.arc(antMidX, antBaseY - antHeight, Math.max(0.8, nearScale * 0.04), 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        }
-      }
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, totalY, w, totalH);
+    ctx.clip();
+    for (let tx = -scrollX; tx < w + skylineWidth; tx += skylineWidth) {
+      ctx.drawImage(skyImg, tx, totalY, skylineWidth, totalH);
     }
+    ctx.restore();
+
+    // Fog at bottom of skyline
+    const fogGrad = ctx.createLinearGradient(0, horizon - 30, 0, horizon + extendBelow);
+    fogGrad.addColorStop(0, "rgba(10, 6, 24, 0)");
+    fogGrad.addColorStop(0.6, "rgba(10, 6, 24, 0.5)");
+    fogGrad.addColorStop(1, "rgba(10, 6, 24, 0.95)");
+    ctx.fillStyle = fogGrad;
+    ctx.fillRect(0, horizon - 30, w, 30 + extendBelow);
+
+    // Top fade
+    const topFade = ctx.createLinearGradient(0, totalY, 0, totalY + skylineHeight * 0.15);
+    topFade.addColorStop(0, "rgba(10, 6, 24, 0.6)");
+    topFade.addColorStop(1, "rgba(10, 6, 24, 0)");
+    ctx.fillStyle = topFade;
+    ctx.fillRect(0, totalY, w, skylineHeight * 0.15);
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
   }
 
-  ctx.globalAlpha = 1;
+  // ── Layer 2: Mid-distance corridor buildings ──
+  if (assets?.corridorMid) {
+    drawParallaxLayer(ctx, assets.corridorMid, w, h, distance, {
+      scrollSpeed: 0.06,
+      alpha: 0.85,
+      yTop: horizon - h * 0.25,
+      yBottom: h,
+      fogBottom: true,
+      fogTop: true,
+    });
+  }
+}
+
+// ── Near Corridor (drawn after road) ─────────────────────────────
+
+function drawNearCorridor(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  distance: number,
+  assets: GameAssets | null
+) {
+  if (!assets?.corridorNear) return;
+  const horizon = h * HORIZON_RATIO;
+
+  // Draw near corridor buildings only on left and right edges of screen
+  // Uses 'screen' blend mode so dark/black areas become invisible
+  const img = assets.corridorNear;
+  const imgAspect = img.width / img.height;
+  const yTop = horizon - h * 0.15;
+  const yBottom = h;
+  const drawH = yBottom - yTop;
+  const drawW = drawH * imgAspect;
+  if (drawW <= 0 || drawH <= 0) return;
+
+  const scrollX = -(distance * 0.15) % drawW;
+  const edgeWidth = w * 0.25; // Only draw on the outer 25% of each side
+
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = 0.85;
+
+  // Left edge buildings
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, yTop, edgeWidth, drawH);
+  ctx.clip();
+  for (let tx = scrollX - drawW; tx < edgeWidth + drawW; tx += drawW) {
+    ctx.drawImage(img, tx, yTop, drawW, drawH);
+  }
+  ctx.restore();
+
+  // Right edge buildings
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(w - edgeWidth, yTop, edgeWidth, drawH);
+  ctx.clip();
+  for (let tx = scrollX - drawW; tx < w + drawW; tx += drawW) {
+    ctx.drawImage(img, tx, yTop, drawW, drawH);
+  }
+  ctx.restore();
+
   ctx.restore();
 }
 
@@ -1245,11 +1128,14 @@ export function render(
   // Sky & background
   drawSky(ctx, w, h, assets, state.distance);
 
+  // Side buildings: skyline panorama + mid-distance corridor
+  drawSideBuildings(ctx, w, h, state.distance, assets);
+
   // Road
   drawRoad(ctx, w, h, state.distance, state.speed, assets);
 
-  // Side buildings: city corridor effect on both sides of the road
-  drawSideBuildings(ctx, w, h, state.distance);
+  // Near corridor buildings (overlaps road edges for immersion)
+  drawNearCorridor(ctx, w, h, state.distance, assets);
 
   // Light posts along road edges
   drawLightPosts(ctx, w, h, state.distance);
