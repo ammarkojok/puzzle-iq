@@ -1,15 +1,16 @@
 // ── Game Tuning Constants ──────────────────────────────────────────
 
 // Lane configuration
+// Road is 15.0 units wide with 3 equal lanes of 5.0 each
 export const LANE_COUNT = 3;
-export const LANE_WIDTH = 2.8; // World units between lane centers (wider for Subway Surfers feel)
+export const LANE_WIDTH = 5.0;
 export const LANE_POSITIONS = [-LANE_WIDTH, 0, LANE_WIDTH]; // Left, Center, Right
 
 // Camera & perspective (over-the-shoulder, looking from above/behind character)
 export const HORIZON_RATIO = 0.25; // 25% from top - high horizon, lots of road visible
 export const CAMERA_HEIGHT = 8.0; // High camera for top-down over-shoulder angle
 export const VIEW_DISTANCE = 200; // Perspective projection distance
-export const ROAD_WIDTH = 9.0; // Wide road fills most of screen width
+export const ROAD_WIDTH = 15.0; // Road is 15 units wide in purple-city-scene.glb
 
 // Speed settings
 export const INITIAL_SPEED = 40; // Comfortable starting speed
@@ -43,12 +44,12 @@ export const DIFFICULTY_STAGES = [
 
 // Character
 export const CHARACTER_Y = 0; // Ground level
-export const CHARACTER_Z = 5; // Distance from camera
-export const CHARACTER_SCREEN_Y = 0.78; // Character feet at 78% of screen height
+export const CHARACTER_Z = 18; // Distance from camera (in 3D space: cameraZ - 18)
+export const CHARACTER_SCREEN_Y = 0.82; // Character feet at 82% of screen height
 export const ANIM_FRAME_DURATION = 0.12; // seconds per frame
 
 // Collision
-export const GATE_COLLECT_Z_THRESHOLD = 3;
+export const GATE_COLLECT_Z_THRESHOLD = 4;
 
 // Particles
 export const MAX_PARTICLES = 30;
@@ -57,6 +58,11 @@ export const PARTICLE_LIFETIME = 0.8; // seconds
 // Road visual
 export const ROAD_SEGMENT_COUNT = 50;
 export const ROAD_STRIPE_LENGTH = 8; // World units per stripe
+
+// Jump & Duck
+export const JUMP_HEIGHT = 4.0; // World units peak height
+export const JUMP_DURATION = 0.6; // Seconds for full jump arc
+export const DUCK_DURATION = 1.1; // Seconds for duck/slide (matches Sprinting Forward Roll clip)
 
 // Swipe input
 export const SWIPE_THRESHOLD = 30; // pixels

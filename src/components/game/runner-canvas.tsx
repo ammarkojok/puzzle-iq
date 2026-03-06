@@ -3,9 +3,7 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import { createGameLoop, type GameController, type RunnerGameState } from "@/lib/runner/engine";
 import { createInputHandler } from "@/lib/runner/input";
-import { loadGameAssets } from "@/lib/runner/assets";
-import { MAX_PIXEL_RATIO } from "@/lib/runner/constants";
-import { createCharacter3D, type Character3D } from "@/lib/runner/character-3d";
+import { Scene3D } from "@/lib/runner/scene-3d";
 
 type Props = {
   onStateChange: (state: RunnerGameState) => void;
@@ -22,124 +20,94 @@ export default function RunnerCanvas({
   onGateCollect,
   controllerRef,
 }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
-  const char3dRef = useRef<Character3D | null>(null);
 
-  const resizeCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
-
-    const dpr = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
-    const rect = container.getBoundingClientRect();
-
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
-
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    }
+  const handleResize = useCallback((scene3d: Scene3D) => {
+    scene3d.resize();
   }, []);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!container) return;
 
     let destroyed = false;
     let controller: GameController | null = null;
     let input: ReturnType<typeof createInputHandler> | null = null;
-    let lastCharUpdateTime = 0;
+    let scene3d: Scene3D | null = null;
+
 
     async function init() {
-      // Load 2D assets and 3D character in parallel
-      const [, char3d] = await Promise.all([
-        loadGameAssets(),
-        createCharacter3D().catch((err) => {
-          console.warn("3D character failed to load, using 2D fallback:", err);
-          return null;
-        }),
-      ]);
-      if (destroyed) return;
+      // Create the Three.js scene manager
+      scene3d = new Scene3D(container!);
 
-      if (char3d) {
-        char3dRef.current = char3d;
+      // Load all 3D assets (environment GLB, gate GLB, FBX character)
+      await scene3d.loadAssets();
+      if (destroyed) {
+        scene3d.dispose();
+        return;
       }
 
       setLoading(false);
-      resizeCanvas();
 
-      // Update 3D character each frame via rAF (before game loop renders)
-      function updateChar3d(timestamp: number) {
-        if (destroyed) return;
-        const dt = Math.min((timestamp - lastCharUpdateTime) / 1000, 0.05);
-        lastCharUpdateTime = timestamp;
-        char3dRef.current?.update(dt);
-        requestAnimationFrame(updateChar3d);
-      }
-      if (char3dRef.current) {
-        lastCharUpdateTime = performance.now();
-        requestAnimationFrame(updateChar3d);
-      }
-
-      controller = createGameLoop(canvas!, {
+      // Create the game loop with scene update callback
+      controller = createGameLoop({
         onStateChange,
         onGameOver,
         onTubeComplete,
         onGateCollect,
-        getChar3dCanvas: () => char3dRef.current?.ready ? char3dRef.current.getCanvas() : null,
+        updateScene: (state, dt) => {
+          scene3d!.update(state, dt);
+        },
       });
 
       controllerRef.current = controller;
 
-      // Input handling
+      // Input handling - attach to the container
       input = createInputHandler({
         onSwipeLeft: () => controller!.moveLeft(),
         onSwipeRight: () => controller!.moveRight(),
+        onSwipeUp: () => controller!.jump(),
+        onSwipeDown: () => controller!.duck(),
         onTap: () => {
           const state = controller!.getState();
           if (state.status === "ready") {
+            // Start game immediately (no intro sequence)
             controller!.start();
           }
         },
       });
 
-      input.attach(canvas!);
+      input.attach(container!);
     }
 
     init();
 
-    const handleResize = () => resizeCanvas();
-    window.addEventListener("resize", handleResize);
+    const onResize = () => {
+      if (scene3d) handleResize(scene3d);
+    };
+    window.addEventListener("resize", onResize);
 
     return () => {
       destroyed = true;
       controller?.destroy();
       input?.detach();
-      char3dRef.current?.dispose();
-      char3dRef.current = null;
-      window.removeEventListener("resize", handleResize);
+      scene3d?.dispose();
+      window.removeEventListener("resize", onResize);
       controllerRef.current = null;
     };
-  }, [resizeCanvas, onStateChange, onGameOver, onTubeComplete, onGateCollect, controllerRef]);
+  }, [handleResize, onStateChange, onGameOver, onTubeComplete, onGateCollect, controllerRef]);
 
   return (
     <div
       ref={containerRef}
       className="absolute inset-0 w-full h-full"
+      style={{ position: "relative" }}
     >
-      <canvas
-        ref={canvasRef}
-        className="block w-full h-full touch-none"
-      />
       {loading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0a0a2e]">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0a0a2e] z-50">
           <div className="w-10 h-10 border-3 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-          <p className="mt-4 text-white/40 text-sm">Loading...</p>
+          <p className="mt-4 text-white/40 text-sm">Loading 3D scene...</p>
         </div>
       )}
     </div>

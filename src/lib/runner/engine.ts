@@ -12,7 +12,9 @@ import {
   CHARACTER_Z,
   GATE_COLLECT_Z_THRESHOLD,
   ANIM_FRAME_DURATION,
-  VIEW_DISTANCE,
+  JUMP_HEIGHT,
+  JUMP_DURATION,
+  DUCK_DURATION,
 } from "./constants";
 import { type Entity } from "./entities";
 import {
@@ -25,11 +27,13 @@ import {
 import { type SpawnerState, createSpawner, spawnGates } from "./spawner";
 import {
   type Particle,
+  type StreamParticle,
   createParticleBurst,
+  createStreamParticles,
   updateParticles as updateParticlesList,
+  updateStreamParticles,
 } from "./particles";
-import { render, type RenderState } from "./renderer";
-import { MAX_PIXEL_RATIO } from "./constants";
+import { type RenderState } from "./scene-3d";
 
 // ── Game State ────────────────────────────────────────────────────
 
@@ -54,8 +58,13 @@ export type RunnerGameState = {
   animFrame: number;
   animTimer: number;
   particles: Particle[];
+  streamParticles: StreamParticle[];
   flashEffect: { color: string; alpha: number } | null;
   gatesCollected: number;
+  verticalState: "ground" | "jumping" | "ducking";
+  jumpProgress: number;
+  duckProgress: number;
+  characterYOffset: number;
 };
 
 function createInitialState(): RunnerGameState {
@@ -78,8 +87,13 @@ function createInitialState(): RunnerGameState {
     animFrame: 0,
     animTimer: 0,
     particles: [],
+    streamParticles: [],
     flashEffect: null,
     gatesCollected: 0,
+    verticalState: "ground",
+    jumpProgress: 0,
+    duckProgress: 0,
+    characterYOffset: 0,
   };
 }
 
@@ -133,6 +147,28 @@ function updateMovement(state: RunnerGameState, dt: number): RunnerGameState {
     animFrame,
     animTimer,
   };
+}
+
+function updateVerticalMovement(state: RunnerGameState, dt: number): RunnerGameState {
+  if (state.verticalState === "jumping") {
+    const jumpProgress = state.jumpProgress + dt / JUMP_DURATION;
+    if (jumpProgress >= 1) {
+      return { ...state, verticalState: "ground", jumpProgress: 0, characterYOffset: 0 };
+    }
+    const characterYOffset = JUMP_HEIGHT * Math.sin(jumpProgress * Math.PI);
+    return { ...state, jumpProgress, characterYOffset };
+  }
+
+  if (state.verticalState === "ducking") {
+    const duckProgress = state.duckProgress + dt / DUCK_DURATION;
+    if (duckProgress >= 1) {
+      return { ...state, verticalState: "ground", duckProgress: 0, characterYOffset: 0 };
+    }
+    return { ...state, duckProgress, characterYOffset: 0 };
+  }
+
+  // Ground state
+  return { ...state, characterYOffset: 0 };
 }
 
 function updateEntities(state: RunnerGameState, dt: number): RunnerGameState {
@@ -205,20 +241,38 @@ function checkCollisions(
       entity.color
     );
 
-    // Create particle burst at character's fixed screen position
-    const screenX = canvasW / 2 + LANE_POSITIONS[entity.lane] * (VIEW_DISTANCE / CHARACTER_Z);
-    const screenY = canvasH * 0.85;
+    // Character screen position (approximate)
+    const laneOffset = LANE_POSITIONS[entity.lane] * (canvasW * 0.06);
+    const screenX = canvasW / 2 + laneOffset;
+    const screenY = canvasH * 0.75;
+
+    // Small burst at collection point
     const newParticles = [
       ...newState.particles,
-      ...createParticleBurst(screenX, screenY, entity.color, 8),
+      ...createParticleBurst(screenX, screenY, entity.color, 5),
+    ];
+
+    // Stream particles from character toward the tube HUD area (top of screen)
+    // Tubes are displayed at ~top 5% of screen, spread across width
+    const tubeIndex = filledSlotIndex >= 0 ? filledSlotIndex : 0;
+    const tubeCount = newState.tubes.slots.length;
+    const tubeSpacing = canvasW * 0.22;
+    const tubeStartX = canvasW / 2 - ((tubeCount - 1) * tubeSpacing) / 2;
+    const targetX = tubeStartX + tubeIndex * tubeSpacing;
+    const targetY = canvasH * 0.06;
+
+    const newStream = [
+      ...newState.streamParticles,
+      ...createStreamParticles(screenX, screenY, targetX, targetY, entity.color, 10),
     ];
 
     newState = {
       ...newState,
       tubes: newTubes,
       particles: newParticles,
+      streamParticles: newStream,
       gatesCollected: newState.gatesCollected + 1,
-      flashEffect: { color: entity.color, alpha: 0.6 },
+      flashEffect: { color: entity.color, alpha: 0.3 },
     };
 
     onGateCollect?.(entity.color);
@@ -307,8 +361,8 @@ export type GameCallbacks = {
   onTubeComplete?: (color: string) => void;
   onGateCollect?: (color: string) => void;
   onStateChange?: (state: RunnerGameState) => void;
-  /** Offscreen canvas from 3D character - updated externally each frame */
-  getChar3dCanvas?: () => HTMLCanvasElement | null;
+  /** Called each frame to update the 3D scene */
+  updateScene?: (state: RenderState, dt: number) => void;
 };
 
 export type GameController = {
@@ -319,14 +373,14 @@ export type GameController = {
   restart: () => void;
   moveLeft: () => void;
   moveRight: () => void;
+  jump: () => void;
+  duck: () => void;
   destroy: () => void;
 };
 
 export function createGameLoop(
-  canvas: HTMLCanvasElement,
   callbacks: GameCallbacks = {}
 ): GameController {
-  const ctx = canvas.getContext("2d")!;
   let state = createInitialState();
   let lastTime = 0;
   let rafId: number;
@@ -339,6 +393,7 @@ export function createGameLoop(
     if (state.status === "running") {
       // Update game state
       state = updateMovement(state, dt);
+      state = updateVerticalMovement(state, dt);
       state = updateEntities(state, dt);
       state = updateFlash(state, dt);
 
@@ -359,14 +414,14 @@ export function createGameLoop(
         state = { ...state, spawner: newSpawner };
       }
 
-      // Collision detection - use logical (CSS) dimensions, not physical pixels
-      const dpr = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
-      const logicalW = canvas.width / dpr;
-      const logicalH = canvas.height / dpr;
+      // Collision detection - use a nominal screen size for particle positions
+      // (particles are rendered on the 2D overlay canvas which handles its own sizing)
+      const screenW = window.innerWidth || 400;
+      const screenH = window.innerHeight || 800;
       state = checkCollisions(
         state,
-        logicalW,
-        logicalH,
+        screenW,
+        screenH,
         callbacks.onGateCollect,
         callbacks.onTubeComplete
       );
@@ -375,6 +430,7 @@ export function createGameLoop(
       state = {
         ...state,
         particles: updateParticlesList(state.particles, dt),
+        streamParticles: updateStreamParticles(state.streamParticles, dt),
       };
 
       // Check game over
@@ -390,23 +446,25 @@ export function createGameLoop(
       }
     }
 
-    // Render
+    // Update 3D scene
     const renderState: RenderState = {
       distance: state.distance,
       speed: state.speed,
       currentLaneX: getCurrentLaneX(state),
       entities: state.entities,
       particles: state.particles,
+      streamParticles: state.streamParticles,
       animFrame: state.animFrame,
       tubes: state.tubes.slots,
       status: state.status,
       comboStreak: state.comboStreak,
       speedBoostTimer: state.speedBoostTimer,
       flashEffect: state.flashEffect,
-      char3dCanvas: callbacks.getChar3dCanvas?.() ?? null,
+      characterYOffset: state.characterYOffset,
+      verticalState: state.verticalState,
     };
 
-    render(ctx, renderState);
+    callbacks.updateScene?.(renderState, dt);
     rafId = requestAnimationFrame(tick);
   }
 
@@ -470,6 +528,18 @@ export function createGameLoop(
           laneTransition: 0,
         };
       }
+    },
+
+    jump() {
+      if (state.status !== "running") return;
+      if (state.verticalState !== "ground") return;
+      state = { ...state, verticalState: "jumping", jumpProgress: 0 };
+    },
+
+    duck() {
+      if (state.status !== "running") return;
+      if (state.verticalState !== "ground") return;
+      state = { ...state, verticalState: "ducking", duckProgress: 0 };
     },
 
     destroy() {

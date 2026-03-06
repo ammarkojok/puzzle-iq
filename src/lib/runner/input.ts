@@ -5,6 +5,8 @@ import { SWIPE_THRESHOLD, SWIPE_MAX_TIME } from "./constants";
 export type InputCallbacks = {
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
+  onSwipeUp: () => void;
+  onSwipeDown: () => void;
   onTap: () => void;
 };
 
@@ -35,6 +37,13 @@ export function createInputHandler(
     const elapsed = Date.now() - startTime;
 
     if (
+      Math.abs(dy) > SWIPE_THRESHOLD &&
+      Math.abs(dy) > Math.abs(dx) &&
+      elapsed < SWIPE_MAX_TIME
+    ) {
+      if (dy < 0) callbacks.onSwipeUp();
+      else callbacks.onSwipeDown();
+    } else if (
       Math.abs(dx) > SWIPE_THRESHOLD &&
       Math.abs(dx) > Math.abs(dy) &&
       elapsed < SWIPE_MAX_TIME
@@ -63,6 +72,18 @@ export function createInputHandler(
       case "D":
         e.preventDefault();
         callbacks.onSwipeRight();
+        break;
+      case "ArrowUp":
+      case "w":
+      case "W":
+        e.preventDefault();
+        callbacks.onSwipeUp();
+        break;
+      case "ArrowDown":
+      case "s":
+      case "S":
+        e.preventDefault();
+        callbacks.onSwipeDown();
         break;
       case " ":
       case "Enter":
