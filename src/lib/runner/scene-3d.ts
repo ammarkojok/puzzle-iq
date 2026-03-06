@@ -18,6 +18,7 @@ import * as THREE from "three";
 import { loadGameAssets3D, type GameAssets3D } from "./assets-3d";
 import {
   LANE_POSITIONS,
+  LANE_WIDTH,
   CHARACTER_Z,
   MAX_PIXEL_RATIO,
 } from "./constants";
@@ -87,6 +88,8 @@ export class Scene3D {
   private overlayCtx: CanvasRenderingContext2D;
 
   private tiles: THREE.Group[] = [];
+  /** Smoothed camera X offset — follows character lane for subtle pan */
+  private cameraXOffset = 0;
 
   private gateTextures = new Map<string, THREE.CanvasTexture>();
   private gateLabelTextures = new Map<string, THREE.CanvasTexture>();
@@ -154,8 +157,9 @@ export class Scene3D {
     this.scene.fog = new THREE.Fog(new THREE.Color(0.04, 0.015, 0.07), 150, 500);
 
     // Camera — wider FOV on portrait screens so side lanes stay visible
+    // Camera pan (40% of lane offset) + 80° FOV covers ±5 lane positions
     const baseFov = 55;
-    const fov = width / height < 1 ? 70 : baseFov;
+    const fov = width / height < 1 ? 80 : baseFov;
     this.camera = new THREE.PerspectiveCamera(fov, width / height, 0.5, 800);
     this.camera.position.copy(CAM_POS);
     this.camera.lookAt(CAM_TARGET);
@@ -786,6 +790,17 @@ export class Scene3D {
       // Re-lock position to suppress root motion from animations
       this.characterModel.position.set(state.currentLaneX, charY, charZ);
     }
+
+    // Subtle camera pan to follow character's lane (like Subway Surfers)
+    // Camera follows ~40% of the lane offset for a comfortable feel
+    const targetCamX = state.currentLaneX * 0.4;
+    this.cameraXOffset = THREE.MathUtils.lerp(this.cameraXOffset, targetCamX, 0.08);
+    this.camera.position.x = CAM_POS.x + this.cameraXOffset;
+    this.camera.lookAt(
+      CAM_TARGET.x + this.cameraXOffset,
+      CAM_TARGET.y,
+      CAM_TARGET.z
+    );
   }
 
   // ── 2D Overlay ──────────────────────────────────────────────
@@ -977,7 +992,7 @@ export class Scene3D {
     this.renderer.setSize(width, height);
     this.camera.aspect = width / height;
     // Widen FOV on portrait so left/right lanes stay visible
-    this.camera.fov = width / height < 1 ? 70 : 55;
+    this.camera.fov = width / height < 1 ? 80 : 55;
     this.camera.updateProjectionMatrix();
     this.overlayCanvas.width = width;
     this.overlayCanvas.height = height;
