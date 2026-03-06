@@ -153,8 +153,10 @@ export class Scene3D {
     this.scene.background = new THREE.Color(0.04, 0.015, 0.07);
     this.scene.fog = new THREE.Fog(new THREE.Color(0.04, 0.015, 0.07), 150, 500);
 
-    // Camera
-    this.camera = new THREE.PerspectiveCamera(55, width / height, 0.5, 800);
+    // Camera — wider FOV on portrait screens so side lanes stay visible
+    const baseFov = 55;
+    const fov = width / height < 1 ? 70 : baseFov;
+    this.camera = new THREE.PerspectiveCamera(fov, width / height, 0.5, 800);
     this.camera.position.copy(CAM_POS);
     this.camera.lookAt(CAM_TARGET);
 
@@ -974,6 +976,8 @@ export class Scene3D {
     if (width === 0 || height === 0) return;
     this.renderer.setSize(width, height);
     this.camera.aspect = width / height;
+    // Widen FOV on portrait so left/right lanes stay visible
+    this.camera.fov = width / height < 1 ? 70 : 55;
     this.camera.updateProjectionMatrix();
     this.overlayCanvas.width = width;
     this.overlayCanvas.height = height;

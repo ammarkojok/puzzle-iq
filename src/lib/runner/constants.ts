@@ -1,9 +1,10 @@
 // ── Game Tuning Constants ──────────────────────────────────────────
 
 // Lane configuration
-// Road is 15.0 units wide with 3 equal lanes of 5.0 each
+// Road is 15.0 units wide — lanes narrowed to 3.5 so character stays
+// visible on portrait phone screens (iPhone ~9:19 aspect ratio)
 export const LANE_COUNT = 3;
-export const LANE_WIDTH = 5.0;
+export const LANE_WIDTH = 3.5;
 export const LANE_POSITIONS = [-LANE_WIDTH, 0, LANE_WIDTH]; // Left, Center, Right
 
 // Camera & perspective (over-the-shoulder, looking from above/behind character)
