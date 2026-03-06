@@ -31,22 +31,20 @@ export type GameAssets3D = {
 let cachedAssets: GameAssets3D | null = null;
 
 /**
- * Strip forward/backward root motion from a Mixamo animation clip.
- * Keeps vertical (Y) movement so jumps/rolls look natural, but zeros out
- * the X and Z position channels on the hip bone so the character stays in place.
+ * Strip root motion position from a Mixamo animation clip.
+ * Zeros X and Z position on the hip bone (keeps Y for vertical movement).
  */
 function stripRootMotion(clip: THREE.AnimationClip): void {
   for (const track of clip.tracks) {
-    const isRootPosition =
-      track.name.includes("Hips.position") ||
-      track.name.includes("Hips[position]");
-    if (isRootPosition && track instanceof THREE.VectorKeyframeTrack) {
-      // Position values are stored as [x0,y0,z0, x1,y1,z1, ...]
-      // Zero out X (index 0,3,6...) and Z (index 2,5,8...) — keep Y (index 1,4,7...)
+    const isHipsPosition =
+      (track.name.includes("Hips.position") || track.name.includes("Hips[position]")) &&
+      track instanceof THREE.VectorKeyframeTrack;
+
+    if (isHipsPosition) {
       const values = track.values;
       for (let i = 0; i < values.length; i += 3) {
-        values[i] = 0;     // X → 0 (no lateral drift)
-        values[i + 2] = 0; // Z → 0 (no forward/back drift)
+        values[i] = 0;     // X → 0
+        values[i + 2] = 0; // Z → 0
       }
     }
   }
@@ -102,8 +100,8 @@ export async function loadGameAssets3D(): Promise<GameAssets3D> {
     loadAnim("/assets/runner/neon-idle.fbx", "idle"),
     // Jump animation (Without Skin)
     loadAnim("/assets/runner/neon-jump.fbx", "jump"),
-    // Slide/roll animation (Without Skin)
-    loadAnim("/assets/runner/neon-slide.fbx", "slide"),
+    // Roll-slide animation (Without Skin)
+    loadAnim("/assets/runner/neon-roll-slide.fbx", "slide"),
     // Typing animation (Without Skin)
     loadAnim("/assets/runner/neon-Typing.fbx", "typing"),
     // Left turn animation (Without Skin)
