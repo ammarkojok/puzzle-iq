@@ -44,7 +44,7 @@ export const DIFFICULTY_STAGES = [
 
 // Character
 export const CHARACTER_Y = 0; // Ground level
-export const CHARACTER_Z = 18; // Distance from camera (in 3D space: cameraZ - 18)
+export const CHARACTER_Z = 10; // Distance from camera (in 3D space: cameraZ - 10)
 export const CHARACTER_SCREEN_Y = 0.82; // Character feet at 82% of screen height
 export const ANIM_FRAME_DURATION = 0.12; // seconds per frame
 

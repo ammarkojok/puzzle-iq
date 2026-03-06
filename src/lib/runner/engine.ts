@@ -532,14 +532,16 @@ export function createGameLoop(
 
     jump() {
       if (state.status !== "running") return;
-      if (state.verticalState !== "ground") return;
-      state = { ...state, verticalState: "jumping", jumpProgress: 0 };
+      // Allow interrupting a duck with a jump (force chain moves)
+      if (state.verticalState === "jumping") return;
+      state = { ...state, verticalState: "jumping", jumpProgress: 0, characterYOffset: 0 };
     },
 
     duck() {
       if (state.status !== "running") return;
-      if (state.verticalState !== "ground") return;
-      state = { ...state, verticalState: "ducking", duckProgress: 0 };
+      // Allow interrupting a jump with a duck (force chain moves)
+      if (state.verticalState === "ducking") return;
+      state = { ...state, verticalState: "ducking", duckProgress: 0, characterYOffset: 0 };
     },
 
     destroy() {

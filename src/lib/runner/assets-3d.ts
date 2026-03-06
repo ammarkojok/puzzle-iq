@@ -1,6 +1,6 @@
 // ── 3D Asset Loader & Cache ────────────────────────────────────────
-// Loads the purple-city-scene GLB environment and FBX character for
-// the Three.js scene renderer.
+// Loads the purple-city-scene GLB environment and Mixamo-rigged neon
+// character with multiple animations for the Three.js scene renderer.
 //
 // The purple-city-scene.glb contains:
 //   - 53 buildings (8 unique types, low-poly)
@@ -8,10 +8,8 @@
 //   - Railings (posts + top bars + mid bars)
 //   - All materials pre-baked (emissive windows, neon lines, etc.)
 //
-// Coordinate system (after glTF Y-up conversion):
-//   Blender Y (forward) → Three.js -Z
-//   Blender Z (up) → Three.js Y
-//   Road surface at Y ≈ 21.36, corridor runs along -Z (400 units)
+// Character: neon-run.fbx (With Skin) — 30K vert Mixamo-rigged punk character
+// Animations loaded from separate FBX files (Without Skin)
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -21,9 +19,9 @@ import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 export type GameAssets3D = {
   /** The full corridor environment (400 units long along -Z) */
   environment: THREE.Group;
-  /** Character mesh, scaled and positioned with feet on y=0 */
+  /** FBX character mesh, scaled and positioned with feet on y=0 */
   characterModel: THREE.Group;
-  /** Named animation clips (may be empty if character has no rig) */
+  /** Named animation clips: "run", "idle", "jump", "slide", "typing", "leftTurn", "rightTurn" */
   characterAnimations: Map<string, THREE.AnimationClip>;
   /** Whether all assets have finished loading */
   loaded: boolean;
@@ -33,10 +31,40 @@ export type GameAssets3D = {
 let cachedAssets: GameAssets3D | null = null;
 
 /**
+ * Strip forward/backward root motion from a Mixamo animation clip.
+ * Keeps vertical (Y) movement so jumps/rolls look natural, but zeros out
+ * the X and Z position channels on the hip bone so the character stays in place.
+ */
+function stripRootMotion(clip: THREE.AnimationClip): void {
+  for (const track of clip.tracks) {
+    const isRootPosition =
+      track.name.includes("Hips.position") ||
+      track.name.includes("Hips[position]");
+    if (isRootPosition && track instanceof THREE.VectorKeyframeTrack) {
+      // Position values are stored as [x0,y0,z0, x1,y1,z1, ...]
+      // Zero out X (index 0,3,6...) and Z (index 2,5,8...) — keep Y (index 1,4,7...)
+      const values = track.values;
+      for (let i = 0; i < values.length; i += 3) {
+        values[i] = 0;     // X → 0 (no lateral drift)
+        values[i + 2] = 0; // Z → 0 (no forward/back drift)
+      }
+    }
+  }
+}
+
+/**
  * Load all 3D game assets. Returns cached result on subsequent calls.
  *
- * Environment: purple-city-scene.glb (Draco compressed, ~2.9 MB)
- * Character: neon-character.fbx (decimated 30K verts, 1024x1024 texture, ~2.5 MB)
+ * Environment: purple-city-scene.glb (Draco compressed, 2.91 MB)
+ *
+ * Character FBX files (Mixamo-rigged neon punk, 30K verts):
+ * - neon-run.fbx        : Character mesh + run animation (With Skin — base model, 3.3 MB)
+ * - neon-idle.fbx       : Idle animation (Without Skin, 575 KB)
+ * - neon-jump.fbx       : Jump animation (Without Skin, 337 KB)
+ * - neon-slide.fbx      : Slide/roll animation (Without Skin, 342 KB)
+ * - neon-Typing.fbx     : Typing animation (Without Skin, 1.0 MB)
+ * - neon-Left Turn.fbx  : Left turn animation (Without Skin, 244 KB)
+ * - neon-Right Turn.fbx : Right turn animation (Without Skin, 294 KB)
  */
 export async function loadGameAssets3D(): Promise<GameAssets3D> {
   if (cachedAssets?.loaded) return cachedAssets;
@@ -48,29 +76,47 @@ export async function loadGameAssets3D(): Promise<GameAssets3D> {
   const gltfLoader = new GLTFLoader();
   gltfLoader.setDRACOLoader(dracoLoader);
 
+  // Helper to load an FBX animation with graceful fallback
+  const loadAnim = (path: string, name: string) =>
+    new FBXLoader().loadAsync(path).catch((err: unknown) => {
+      console.warn(`[ASSETS] ${name} animation failed:`, err);
+      return null;
+    });
+
   // ── Load all assets in parallel ─────────────────────────────
-  console.log("[ASSETS] Starting parallel asset load...");
-  const [environmentGltf, characterFbx] = await Promise.all([
+  const [
+    environmentGltf,
+    characterFbx,
+    idleFbx,
+    jumpFbx,
+    slideFbx,
+    typingFbx,
+    leftTurnFbx,
+    rightTurnFbx,
+  ] = await Promise.all([
     // Purple city scene with all buildings, road, railings, neon lines
-    gltfLoader
-      .loadAsync("/assets/runner/purple-city-scene.glb")
-      .then((r) => {
-        console.log("[ASSETS] ✓ environment loaded");
-        return r;
-      }),
-    // Character mesh (neon mohawk punk, 30K verts, with baked texture)
-    new FBXLoader()
-      .loadAsync("/assets/runner/neon-character.fbx")
-      .then((r) => {
-        console.log("[ASSETS] ✓ character loaded");
-        return r;
-      }),
+    gltfLoader.loadAsync("/assets/runner/purple-city-scene.glb"),
+    // Primary character mesh: neon-run.fbx (With Skin = rigged mesh + run animation)
+    new FBXLoader().loadAsync("/assets/runner/neon-run.fbx"),
+    // Idle animation (Without Skin)
+    loadAnim("/assets/runner/neon-idle.fbx", "idle"),
+    // Jump animation (Without Skin)
+    loadAnim("/assets/runner/neon-jump.fbx", "jump"),
+    // Slide/roll animation (Without Skin)
+    loadAnim("/assets/runner/neon-slide.fbx", "slide"),
+    // Typing animation (Without Skin)
+    loadAnim("/assets/runner/neon-Typing.fbx", "typing"),
+    // Left turn animation (Without Skin)
+    loadAnim("/assets/runner/neon-Left Turn.fbx", "leftTurn"),
+    // Right turn animation (Without Skin)
+    loadAnim("/assets/runner/neon-Right Turn.fbx", "rightTurn"),
   ]);
 
   // ── Process environment ─────────────────────────────────────
   const environment = environmentGltf.scene;
 
   // ── Process character model ─────────────────────────────────
+  // Use neon-run.fbx as the base model (it has the full rigged mesh/skin + run animation)
   const characterModel = characterFbx;
   const characterAnimations = new Map<string, THREE.AnimationClip>();
 
@@ -90,11 +136,34 @@ export async function loadGameAssets3D(): Promise<GameAssets3D> {
   characterModel.position.y -= charBox.min.y;
   characterModel.position.z -= charCenter.z;
 
-  // Collect any embedded animations (if present)
-  if (characterFbx.animations?.length) {
-    for (const clip of characterFbx.animations) {
-      characterAnimations.set(clip.name, clip);
-    }
+  // Mixamo FBX characters face +Z by default — no rotation needed here.
+  // scene-3d.ts rotates to face -Z (forward) when game starts.
+
+  // ── Collect animation clips ─────────────────────────────────
+  // Run animation embedded in the character model FBX (With Skin)
+  if (characterFbx.animations?.[0]) {
+    characterAnimations.set("run", characterFbx.animations[0]);
+  }
+  // Separate animation FBX files (Without Skin — animation clips only)
+  if (idleFbx?.animations?.[0]) {
+    characterAnimations.set("idle", idleFbx.animations[0]);
+  }
+  if (jumpFbx?.animations?.[0]) {
+    stripRootMotion(jumpFbx.animations[0]);
+    characterAnimations.set("jump", jumpFbx.animations[0]);
+  }
+  if (slideFbx?.animations?.[0]) {
+    stripRootMotion(slideFbx.animations[0]);
+    characterAnimations.set("slide", slideFbx.animations[0]);
+  }
+  if (typingFbx?.animations?.[0]) {
+    characterAnimations.set("typing", typingFbx.animations[0]);
+  }
+  if (leftTurnFbx?.animations?.[0]) {
+    characterAnimations.set("leftTurn", leftTurnFbx.animations[0]);
+  }
+  if (rightTurnFbx?.animations?.[0]) {
+    characterAnimations.set("rightTurn", rightTurnFbx.animations[0]);
   }
 
   // ── Cache and return ────────────────────────────────────────

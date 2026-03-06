@@ -56,11 +56,11 @@ const ROAD_Y = 21.36;
 /** Combined Y for placing entities on road (tiny offset to prevent Z-fighting) */
 const ENTITY_Y = ROAD_Y + 0.05;
 
-/** Camera position — behind and above the road, looking forward down the corridor */
-const CAM_POS = new THREE.Vector3(0, ROAD_Y + 5, 85);
+/** Camera position — closer behind and slightly higher for a nicer character/road view */
+const CAM_POS = new THREE.Vector3(0, ROAD_Y + 7, 62);
 
-/** Where the camera looks (at road level, further ahead) */
-const CAM_TARGET = new THREE.Vector3(0, ROAD_Y, 40);
+/** Where the camera looks (slightly above road, ahead of character) */
+const CAM_TARGET = new THREE.Vector3(0, ROAD_Y + 1.5, 38);
 
 /** Tile overlap to hide seams between corridor segments */
 const TILE_OVERLAP = 2.0;
@@ -392,6 +392,20 @@ export class Scene3D {
     );
     overheadLight.position.set(0, ROAD_Y + 15, CAM_POS.z - 15);
     this.scene.add(overheadLight);
+
+    // Character spotlight — warm white key light to make the character pop
+    const charSpot = new THREE.SpotLight(
+      new THREE.Color(1.0, 0.95, 0.9), // warm white
+      5.0,       // intensity
+      80,        // distance
+      Math.PI / 6, // angle (30 deg cone)
+      0.4        // penumbra (soft edge)
+    );
+    const charZ = CAM_POS.z - CHARACTER_Z;
+    charSpot.position.set(0, ROAD_Y + 12, charZ + 8); // above and slightly behind character
+    charSpot.target.position.set(0, ROAD_Y + 1.5, charZ); // aim at character center
+    this.scene.add(charSpot);
+    this.scene.add(charSpot.target);
   }
 
   // ── Stars ───────────────────────────────────────────────────
@@ -491,9 +505,9 @@ export class Scene3D {
 
   // ── Animation ───────────────────────────────────────────────
 
-  setAnimation(name: string): void {
+  setAnimation(name: string, force = false): void {
     if (!this.mixer) return;
-    if (name === this.currentAnimName) return;
+    if (name === this.currentAnimName && !force) return;
     const clip = this.animations.get(name);
     if (!clip) return;
 
@@ -512,7 +526,9 @@ export class Scene3D {
     newAction.play();
 
     if (this.currentAction) {
-      this.currentAction.crossFadeTo(newAction, CROSSFADE_DURATION, true);
+      // When forcing a move switch (e.g. jump→slide), cut instantly
+      const fadeDuration = force ? 0.05 : CROSSFADE_DURATION;
+      this.currentAction.crossFadeTo(newAction, fadeDuration, true);
     }
 
     this.currentAction = newAction;
@@ -750,10 +766,12 @@ export class Scene3D {
     // Only handle gameplay animations when intro is done and game is running
     if (this.introFinished && state.status === "running") {
       if (state.verticalState !== this.prevVerticalState) {
+        // Force instant transition so chained moves (jump→slide, slide→jump) cut immediately
+        const force = true;
         if (state.verticalState === "jumping") {
-          this.setAnimation("jump");
+          this.setAnimation("jump", force);
         } else if (state.verticalState === "ducking") {
-          this.setAnimation("slide");
+          this.setAnimation("slide", force);
         } else if (state.verticalState === "ground") {
           this.setAnimation("run");
         }
